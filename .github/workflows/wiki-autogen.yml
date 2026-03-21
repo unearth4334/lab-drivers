@@ -1,0 +1,115 @@
+name: Auto-generate Wiki Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'src/lab_drivers/**/*.py'
+      - 'mkdocs.yml'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+jobs:
+  generate-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mkdocs mkdocs-material mkdocstrings
+
+      - name: Build documentation with mkdocs
+        run: mkdocs build
+
+      - name: Checkout Wiki repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki-repo
+
+      - name: Sync generated docs to Wiki
+        run: |
+          # Clear existing wiki content (except Home.md if you want to preserve it)
+          cd wiki-repo
+          find . -maxdepth 1 -type f -name '*.md' ! -name 'Home.md' -delete
+          find . -maxdepth 1 -type d ! -name '.' ! -name '..' -exec rm -rf {} + 2>/dev/null || true
+          
+          # Copy generated site structure, converting HTML structure to Wiki navigation
+          # This script transforms the site/ directory structure to Wiki-friendly markdown
+          python3 << 'EOF'
+          import os
+          import re
+          from pathlib import Path
+          
+          site_dir = Path("../site")
+          wiki_dir = Path(".")
+          
+          def convert_html_to_markdown(html_path):
+              """Extract content from HTML and convert to markdown reference"""
+              try:
+                  with open(html_path, 'r') as f:
+                      content = f.read()
+                  # Extract title from HTML
+                  title_match = re.search(r'<title>([^<]+)</title>', content)
+                  title = title_match.group(1) if title_match else "Documentation"
+                  return title
+              except:
+                  return None
+          
+          # Walk through generated site and create wiki structure
+          if site_dir.exists():
+              for html_file in site_dir.rglob("*.html"):
+                  if html_file.name == "index.html":
+                      continue
+                  relative_path = html_file.relative_to(site_dir)
+                  md_path = wiki_dir / relative_path.with_suffix('.md')
+                  
+                  title = convert_html_to_markdown(html_file)
+                  if title:
+                      md_path.parent.mkdir(parents=True, exist_ok=True)
+                      # Create a markdown file with reference to the built documentation
+                      with open(md_path, 'w') as f:
+                          f.write(f"# {title}\n\n")
+                          f.write(f"_This page is auto-generated from the MkDocs documentation._\n\n")
+                          f.write(f"For full documentation, see the [main documentation site](https://{os.environ.get('GITHUB_REPOSITORY', 'owner/repo')}.github.io).\n")
+          EOF
+
+      - name: Commit and push to Wiki
+        run: |
+          cd wiki-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are changes
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add .
+            git commit -m "docs: auto-generate wiki from mkdocs [skip ci]"
+            git push
+          fi
+
+      - name: Upload site as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation
+          path: site/
+          retention-days: 30
