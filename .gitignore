@@ -12,6 +12,10 @@ site/
 *.egg
 pip-wheel-metadata/
 
+# Local wiki generation artifacts
+test_wiki_output/
+wiki-repo/
+
 # Virtual environments
 .venv/
 venv/
