@@ -234,26 +234,10 @@ _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.1
 
 class KS33500B:
-    """
-    Driver for Keysight 33500B Function/Arbitrary Waveform Generator.
-    
-    This class provides methods for connecting to and controlling a
-    Keysight 33500B waveform generator via VISA interface.
-    
-    Attributes:
-        rm: PyVISA ResourceManager instance
-        address: Device VISA address
-        instrument: Active connection handle
-        status: Connection status ("Connected" or "Not Connected")
-        loading: Loading indicator helper
-        debug: Enable/disable debug printing
-        
-    Example:
-        >>> gen = KS33500B()
-        >>> gen.set_squ_freq(1000, source=1)
-        >>> gen.set_squ_amp(5.0, source=1)
-        >>> gen.set_squ_dcyc(50.0, source=1)
-        >>> gen.disconnect()
+    """Keysight 33500B waveform-generator driver.
+
+    VISA-backed driver for waveform setup, modulation controls, and output
+    state management in automated signal-generation tasks.
     """
     
     def __init__(self, auto_connect: bool = True, address: Optional[str] = None, debug: bool = False):

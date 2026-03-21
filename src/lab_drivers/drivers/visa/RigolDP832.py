@@ -238,11 +238,17 @@ Establishes a connection to the Rigol DP832 Power Supply
 Example usage:
 """
 class RigolDP832:
+    """Rigol DP832 triple-output power supply driver.
 
+    Exposes per-channel voltage/current control and measurement helpers.
+
+    Supported get() items:
+        - "voltage", "current", "power"
+        - "average_voltage", "average_current", "average_power"
     """
-    Initializes an instance of the RigolDP832 class.
-    """
+
     def __init__(self,auto_connect=True):
+        """Initialize the driver and optionally connect."""
 
         init(autoreset=True)    
 
@@ -258,16 +264,8 @@ class RigolDP832:
         if auto_connect:
             self.connect()
 
-    """
-    Establishes a connection to the Rigol DP832 Power Supply.
-
-    Raises:
-        ConnectionError: If unable to connect to Rigol DP832 Power Supply.
-
-    Example usage:
-        power_supply.connect()
-    """
     def connect(self):
+        """Connect to the first VISA resource matching DP832 identifiers."""
 
         resources = self.rm.list_resources()
         for resource in resources:
@@ -291,35 +289,20 @@ class RigolDP832:
             error_message = f"Failed to connect to Rigol DP832 Power Supply at {self.address}: {e}"
             raise ConnectionError(_ERROR_STYLE + error_message)
         
-    """
-    Disconnects from the Rigol DP832 Power Supply.
-
-    Example usage:
-        power_supply.disconnect()
-    """
     def disconnect(self):
+        """Disconnect from the instrument and close the VISA session."""
         if self.instrument is not None:
             self.instrument.close()
             print(f"\rDisconnected from Rigol DP832 Power Supply at {self.address}")
             self.status = "Not Connected"
 
-    """
-    Retrieves the specified value.
-    
-    Args:
-        item (str): The measurement item to retrieve. Valid values are "STAT", "CURR", or "VOLT".
-    
-    Returns:
-        The measurement result corresponding to the specified item and channel.
-
-    Raises:
-        ValueError: If an invalid item is requested.
-    
-    Example usage:
-        voltage = multimeter.get("VOLT")
-        print(f"Voltage: {voltage} V")
-    """
     def get(self, item, channel=1):
+        """Return a channel measurement by key.
+
+        Args:
+            item: Measurement key listed in the class docstring.
+            channel: Output channel number (1-3).
+        """
 
         item = item.lower()
 

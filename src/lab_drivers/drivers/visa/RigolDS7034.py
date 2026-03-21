@@ -283,11 +283,17 @@ _MAX_FILENAMES = 100
 _DELAY = 0.1 #seconds
 
 class RigolDS7034:
+    """Rigol DS7034 oscilloscope driver.
 
+    Provides VISA connection, measurement readback, statistics, and screenshot
+    capture for automated test workflows.
+
+    Supported get() items include common measurement/statistics keys and
+    "SCREENSHOT".
     """
-    Initializes an instance of the RigolDS7034 class.
-    """
+
     def __init__(self, auto_connect=True):
+        """Initialize the driver and optionally connect."""
         
         init(autoreset=True)
 
@@ -303,16 +309,8 @@ class RigolDS7034:
         if auto_connect:
             self.connect()
 
-    """
-    Establishes a connection to the Rigol DS7034 Oscilloscope.
-
-    Raises:
-        ConnectionError: If unable to connect to Rigol DS7034 Oscilloscope.
-    
-    Example usage:
-        oscilloscope.connect()
-    """
     def connect(self):
+        """Connect to the first VISA resource matching DS7034 identifiers."""
 
         resources = self.rm.list_resources()
         for resource in resources:
@@ -336,38 +334,21 @@ class RigolDS7034:
             raise ConnectionError(_ERROR_STYLE + error_message)
 
     
-    """
-    Disconnects from the Rigol DS7034 Oscilloscope.
-    
-    Example usage:
-        oscilloscope.disconnect()
-    """
     def disconnect(self):
+        """Disconnect from the instrument and close the VISA session."""
         
         if self.instrument is not None:
             self.instrument.close()
             print(f"\rDisconnected from Rigol DS7034 Oscilloscope at {self.address}")
             self.status = "Not Connected"
 
-    """
-    Retrieves the specified value.
-    
-    Args:
-        item (str): The measurement item to retrieve.
-        channel (int, optional): The channel number for the measurement.
-           Defaults to 1.
-    
-    Returns:
-        The measurement result corresponding to the specified item and channel.
-
-    Raises:
-        ValueError: If an invalid item is requested.
-    
-    Example usage:
-        measurement = oscilloscope.get("VAVG", channel=2)
-        print(f"Measurement for VAVG on channel 2: {measurement}")
-    """
     def get(self,item,channel=1):
+        """Return a measurement/statistics result by key.
+
+        Args:
+            item: Measurement/statistics key or "SCREENSHOT".
+            channel: Scope channel index for channel-based items.
+        """
 
         item = item.upper()
 

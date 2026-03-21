@@ -1,109 +1,33 @@
 # API Reference
 
-Complete API documentation for all supported laboratory instruments.
+This section is intentionally minimal and generated from source docstrings.
 
-## Serial Drivers (RS-232/USB)
+## Drivers
 
-| Driver | Device Type | Key Features |
-|--------|-------------|--------------|
-| [RigolDP711](serial/rigoldp711.md) | Programmable DC PSU | 0-30V / 0-5A, RS-232, type hints |
-| [KA3010P](serial/ka3010p.md) | Programmable DC PSU | 0-30V / 0-10A, RS-232, full docstrings |
-| [FLUKE45](serial/fluke45.md) | Bench Multimeter | 4.5-digit DMM, dual-display, type hints |
+| Driver | Module path | Page |
+| --- | --- | --- |
+| DL3021 | `lab_drivers.drivers.visa.DL3021.DL3021` | [DL3021](drivers/dl3021.md) |
+| DMM6500 | `lab_drivers.drivers.visa.DMM6500.DMM6500` | [DMM6500](drivers/dmm6500.md) |
+| DP832 | `lab_drivers.drivers.visa.DP832.DP832` | [DP832](drivers/dp832.md) |
+| FLUKE45 | `lab_drivers.drivers.serial.FLUKE45.FLUKE45` | [FLUKE45](drivers/fluke45.md) |
+| KA3010P | `lab_drivers.drivers.serial.KA3010P.KA3010P` | [KA3010P](drivers/ka3010p.md) |
+| KS33500B | `lab_drivers.drivers.visa.KS33500B.KS33500B` | [KS33500B](drivers/ks33500b.md) |
+| Keysight34460A | `lab_drivers.drivers.visa.Keysight34460A.Keysight34460A` | [Keysight34460A](drivers/keysight34460a.md) |
+| KeysightMSOX4154A | `lab_drivers.drivers.visa.KeysightMSOX4154A.KeysightMSOX4154A` | [KeysightMSOX4154A](drivers/keysightmsox4154a.md) |
+| RigolDP711 | `lab_drivers.drivers.serial.RigolDP711.RigolDP711` | [RigolDP711](drivers/rigoldp711.md) |
+| RigolDP832 | `lab_drivers.drivers.visa.RigolDP832.RigolDP832` | [RigolDP832](drivers/rigoldp832.md) |
+| RigolDS7034 | `lab_drivers.drivers.visa.RigolDS7034.RigolDS7034` | [RigolDS7034](drivers/rigolds7034.md) |
+| RSA3030 | `lab_drivers.drivers.visa.RSA3030.RSA3030` | [RSA3030](drivers/rsa3030.md) |
+| StanfordPS310 | `lab_drivers.drivers.visa.StanfordPS310.StanfordPS310` | [StanfordPS310](drivers/stanfordps310.md) |
+| U1233A | `lab_drivers.drivers.serial.U1233A.U1233A` | [U1233A](drivers/u1233a.md) |
 
-## VISA Drivers (USB/Ethernet/GPIB)
+## Quick usage
 
-| Driver | Device Type | Key Features |
-|--------|-------------|--------------|
-| [RSA3030](visa/rsa3030.md) | Spectrum Analyzer | 100 kHz-3 GHz, link-local discovery, auto-detect |
-| [DL3021](visa/dl3021.md) | Electronic Load | CC/CV/CR/CP modes, 150W, type hints |
-| [StanfordPS310](visa/stanfordps310.md) | High Voltage PSU | ±1250V, GPIB, glitch filtering, debug logging |
-| [KS33500B](visa/ks33500b.md) | Waveform Generator | Dual channel, 1μHz-30MHz, modulation support |
-
-## Standard Interface
-
-All drivers implement these standard methods:
-
-### Connection
-- `connect(**kwargs)` - Establish connection to device
-- `disconnect()` - Close connection
-- `__init__(auto_connect=True, **kwargs)` - Initialize and optionally auto-connect
-
-### Measurement
-- `measure_voltage()` - Measure voltage (device-specific return type)
-- `measure_current()` - Measure current (device-specific return type)
-- `measure_resistance()` - Measure resistance (if applicable)
-- `get(item, **kwargs)` - Generic getter for any measurement/property
-
-### Configuration
-- `set_voltage(voltage, **kwargs)` - Set voltage output
-- `set_current(current, **kwargs)` - Set current limit
-- `set_output_state(state, **kwargs)` - Enable/disable output
-- Device-specific methods (e.g., `set_frequency()`, `set_mode()`)
-
-## Connection Methods
-
-### Auto-Detection (Recommended)
 ```python
-from lab_drivers.drivers.serial import RigolDP711
-psu = RigolDP711()  # Auto-detects and connects
+from lab_drivers.drivers.serial import FLUKE45
+
+meter = FLUKE45()
+value = meter.get("voltage")
+print(value)
+meter.disconnect()
 ```
-
-### Explicit Addressing
-```python
-# Serial port
-psu = RigolDP711(com_port="/dev/ttyUSB0")
-
-# VISA address
-load = DL3021(address="GPIB0::10::INSTR")
-
-# IP address
-spectrum = RSA3030(ip_address="192.168.1.100")
-```
-
-## Supported Measurements
-
-### Basic Measurements
-All power supply drivers support:
-- **Voltage** - `measure_voltage()` → float (V)
-- **Current** - `measure_current()` → float (A)
-
-### Multi-Channel Measurements
-Multi-channel drivers (spectrum analyzer, waveform generator) support per-channel queries:
-```python
-# Example: Multi-channel oscilloscope
-stats = device.get("statistics", channel=1)  # [mean, std, min, max]
-```
-
-### Statistical Data
-High-precision instruments support statistical readback:
-```python
-stats = device.get("statistics")
-mean, std_dev, minimum, maximum = stats
-```
-
-Format varies by instrument:
-- **Multimeters/Load**: `[mean, std_dev, min, max]` (4-tuple)
-- **Oscilloscopes**: `[mean, std_dev, min, max, peak_to_peak]` (5-tuple)
-
-## Device Categories
-
-### Power Supplies
-- **RigolDP711** - 0-30V/0-5A, RS-232
-- **KA3010P** - 0-30V/0-10A, RS-232
-- **StanfordPS310** - ±1250V, GPIB (high voltage)
-
-### Multimeters
-- **FLUKE45** - 4.5-digit, dual-display, RS-232
-- **KA3010P** - (Also supports current limiting)
-
-### Measurement & Testing
-- **RSA3030** - Spectrum analyzer, 100 kHz-3 GHz
-- **DL3021** - Electronic load, CCCurrentValue/CV/CR/CP modes
-
-### Signal Generation
-- **KS33500B** - Dual-channel waveform generator, 1μHz-30MHz
-
-## Next Steps
-
-- **[Getting Started](../getting-started.md)** - Basic usage patterns
-- **[Examples](../examples/quickstart.md)** - Code examples for common tasks

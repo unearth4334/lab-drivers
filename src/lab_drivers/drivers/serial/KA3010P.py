@@ -144,26 +144,10 @@ _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.2  # in seconds
 
 class KA3010P:
-    """
-    Driver for Korad KA3010P Programmable DC Power Supply.
-    
-    This class provides methods for connecting to and controlling a
-    KA3010P power supply via RS-232 serial interface.
-    
-    Attributes:
-        ser: Serial connection object
-        address: COM port address
-        status: Connection status ("Connected" or "Not Connected")
-        identity: Device identification string
-        
-    Example:
-        >>> ps = KA3010P()
-        >>> ps.set_voltage(5.0)
-        >>> ps.set_current(1.0)
-        >>> ps.turn_on()
-        >>> voltage = ps.measure_voltage()
-        >>> ps.turn_off()
-        >>> ps.disconnect()
+    """Korad KA3010P programmable power-supply driver.
+
+    Serial-backed driver for output control, measurement readback, and generic
+    `get()` access used by automated logging scripts.
     """
     
     def __init__(self, auto_connect: bool = True, com_port: Optional[str] = None, baud_rate: int = 9600):

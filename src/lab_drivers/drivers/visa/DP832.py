@@ -188,26 +188,10 @@ _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.01  # in seconds
 
 class DP832:
-    """
-    Driver for Rigol DP832 Triple-Output Power Supply.
-    
-    This class provides methods for connecting to and controlling a
-    Rigol DP832 programmable DC power supply via VISA interface.
-    
-    Attributes:
-        rm: PyVISA ResourceManager instance
-        address: Device VISA address
-        instrument: Active connection handle
-        status: Connection status ("Connected" or "Not Connected")
-        
-    Example:
-        >>> ps = DP832()
-        >>> ps.set_voltage(1, 5.0)
-        >>> ps.set_current(1, 1.0)
-        >>> ps.toggle_output(1, 'ON')
-        >>> voltage = ps.measure_voltage(1)
-        >>> ps.toggle_output(1, 'OFF')
-        >>> ps.disconnect()
+    """Rigol DP832 triple-output power-supply driver.
+
+    VISA-backed driver with per-channel set/measure helpers and a generic
+    `get()` interface for data capture.
     """
     
     def __init__(self, auto_connect: bool = True, address: Optional[str] = None):

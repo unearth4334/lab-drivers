@@ -257,19 +257,10 @@ def _strip_quotes(s: str) -> str:
 
 
 class DMM6500:
-    """
-    Simple SCPI wrapper for Keithley/Tektronix DMM6500.
+    """Keithley/Tektronix DMM6500 multimeter driver.
 
-    Example:
-        mm = DMM6500()                           # auto-detect using '6500'
-        mm.configure("RESISTANCE", 1000.0, 1e-6)
-        r = mm.measure_resistance()
-        print("R =", r)
-        mm.disconnect()
-
-    "Digitize" helpers:
-        data = mm.digitize_current(duration_s=2.0, fixed_range=0.1, nplc=0.001)
-        print(len(data), "samples")
+    VISA-backed SCPI driver covering standard measurements plus high-speed
+    digitize helpers used in capture workflows.
     """
 
     # -----------------------------

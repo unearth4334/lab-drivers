@@ -117,7 +117,24 @@ _DELAY = 0.05
 _CONNECTION_TIMEOUT = 1
 
 class U1233A:
+    """Agilent U1233A handheld multimeter driver.
+
+    Provides serial connection and measurement helpers used by data-logging
+    workflows.
+
+    Supported get() items:
+        - "MEAS": single reading tuple `(value, error)`
+        - "MEAS_AVG": averaged tuple `(mean, stdev)`
+    """
+
     def __init__(self,auto_connect=True, baud_rate=9600,com_port=None):
+        """Initialize the driver and optionally connect.
+
+        Args:
+            auto_connect: Connect during initialization when True.
+            baud_rate: Serial baud rate.
+            com_port: Optional explicit serial port.
+        """
 
         init(autoreset=True)
         self.status = "Not Connected"
@@ -131,6 +148,16 @@ class U1233A:
             self.connect(baud_rate, com_port)
         
     def connect(self,baud_rate=9600,com_port=None, prompt_on_fail: bool = True):
+        """Connect to the instrument over serial.
+
+        Args:
+            baud_rate: Serial baud rate.
+            com_port: Optional explicit serial port.
+            prompt_on_fail: Prompt for manual port selection when auto-connect fails.
+
+        Returns:
+            Active serial handle.
+        """
 
         try:
             if com_port is None:
@@ -181,6 +208,12 @@ class U1233A:
         return self.ser
 
     def get(self,item,channel=1):
+        """Return a measurement by command token.
+
+        Args:
+            item: "MEAS" or "MEAS_AVG".
+            channel: Unused placeholder kept for compatibility.
+        """
 
         items = { "MEAS"    :self.measure,
                   "MEAS_AVG":self.measure_avg}
@@ -191,6 +224,7 @@ class U1233A:
 
 
     def measure(self):
+        """Read one measurement from the active meter mode."""
 
         command = 'READ?\n'
 
@@ -200,6 +234,7 @@ class U1233A:
         return (float(val),0)
 
     def measure_avg(self,n=10):
+        """Return mean and standard deviation of repeated measurements."""
 
         val = numpy.zeros(n)
         for x in range(n):
@@ -211,6 +246,7 @@ class U1233A:
         return (statistics.fmean(val),statistics.stdev(val))
 
     def disconnect(self):
+        """Close the serial connection."""
         if self.ser.isOpen():
             self.ser.close()
             print("Disconnected from {self.identity} on COM port {self.com_port}.")

@@ -34,26 +34,23 @@ theme:
 nav:
   - Home: index.md
   - Installation: install.md
-  - Getting Started: getting-started.md
   - API Reference:
     - api/index.md
-    - Serial Drivers:
-      - RigolDP711: api/serial/rigoldp711.md
-      - KA3010P: api/serial/ka3010p.md
-      - FLUKE45: api/serial/fluke45.md
-    - VISA Drivers:
-      - RSA3030: api/visa/rsa3030.md
-      - DL3021: api/visa/dl3021.md
-      - StanfordPS310: api/visa/stanfordps310.md
-      - KS33500B: api/visa/ks33500b.md
-  - Examples:
-    - Quick Start: examples/quickstart.md
-    - Power Supplies: examples/power-supplies.md
-    - Measurement Devices: examples/measurement-devices.md
-    - Waveform Generation: examples/waveform-generation.md
-    - Spectrum Analysis: examples/spectrum-analysis.md
-  - Architecture: architecture.md
-  - Legacy Architecture: ARCHITECTURE.md
+    - Drivers:
+      - DL3021: api/drivers/dl3021.md
+      - DMM6500: api/drivers/dmm6500.md
+      - DP832: api/drivers/dp832.md
+      - FLUKE45: api/drivers/fluke45.md
+      - KA3010P: api/drivers/ka3010p.md
+      - KS33500B: api/drivers/ks33500b.md
+      - Keysight34460A: api/drivers/keysight34460a.md
+      - KeysightMSOX4154A: api/drivers/keysightmsox4154a.md
+      - RigolDP711: api/drivers/rigoldp711.md
+      - RigolDP832: api/drivers/rigoldp832.md
+      - RigolDS7034: api/drivers/rigolds7034.md
+      - RSA3030: api/drivers/rsa3030.md
+      - StanfordPS310: api/drivers/stanfordps310.md
+      - U1233A: api/drivers/u1233a.md
 
 # Plugins
 plugins:
@@ -65,7 +62,7 @@ plugins:
         python:
           paths: [src]
           options:
-            show_source: true
+            show_source: false
             show_root_heading: true
             show_object_full_path: false
             docstring_style: numpy

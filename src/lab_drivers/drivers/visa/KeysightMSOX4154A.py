@@ -290,12 +290,10 @@ _SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
 _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 
 class KeysightMSOX4154A:
-    """
-    Example:
-        osc = KeysightMSOX4154A(auto_connect=False)
-        osc.connect("USB0::0x0957::0x17BC::MY59241237::INSTR")
-        t, y, meta = osc.get_waveform(source="CHAN1")
-        osc.disconnect()
+    """Keysight MSOX4154A mixed-signal oscilloscope driver.
+
+    VISA-backed driver providing connection management, waveform retrieval, and
+    scope configuration helpers for test automation.
     """
 
     def __init__(self, auto_connect: bool = True, timeout_ms: int = 20000, chunk_size: int = 102_400):

@@ -216,11 +216,18 @@ Example usage:
     print(f"Measured voltage: {voltage} V")
 """
 class Keysight34460A:
+    """Keysight 34460A digital multimeter driver.
 
+    Provides a minimal measurement interface for voltage/current and statistics.
+
+    Supported get() items:
+        - "voltage"
+        - "current"
+        - "statistics"
     """
-    Initializes an instance of the Keysight34460A class.
-    """
+
     def __init__(self, auto_connect=True):
+        """Initialize the driver and optionally connect."""
         
         init(autoreset=True)
 
@@ -234,16 +241,8 @@ class Keysight34460A:
         if auto_connect:
             self.connect()
         
-    """
-    Establishes a connection to the Keysight 34460A Multimeter.
-
-    Raises:
-        ConnectionError: If unable to connect to Keysight 34460A Multimeter.
-    
-    Example usage:
-        multimeter.connect()
-    """
     def connect(self):
+        """Connect to the first VISA resource matching the 34460A identity."""
         
         resources = self.rm.list_resources()
         for resource in resources:
@@ -266,36 +265,20 @@ class Keysight34460A:
             error_message = f"Failed to connect to Keysight 34460A Multimeter at {self.address}: {e}"
             raise ConnectionError(_ERROR_STYLE + error_message)
 
-    """
-    Disconnects from the Keysight 34460A Multimeter.
-    
-    Example usage:
-        multimeter.disconnect()
-    """
     def disconnect(self):
+        """Disconnect from the instrument and close the VISA session."""
         
         if self.instrument is not None:
             self.instrument.close()
             print(f"\rDisconnected from Keysight 34460A Multimeter at {self.address}")
             self.status = "Not Connected"
 
-    """
-    Retrieves the specified value.
-    
-    Args:
-        item (str): The measurement item to retrieve. Valid values are "STAT", "CURR", or "VOLT".
-    
-    Returns:
-        The measurement result corresponding to the specified item and channel.
-
-    Raises:
-        ValueError: If an invalid item is requested.
-    
-    Example usage:
-        voltage = multimeter.get("VOLT")
-        print(f"Voltage: {voltage} V")
-    """
     def get(self, item):
+        """Return a measurement by key.
+
+        Args:
+            item: One of "statistics", "current", or "voltage".
+        """
     
         items = {
             "statistics": self.calculate_statistics,
