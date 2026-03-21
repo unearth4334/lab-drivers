@@ -91,14 +91,29 @@ jobs:
               else:
                   candidate_names[rel] = rel_path.stem
 
-          collisions = {name for name, count in Counter(candidate_names.values()).items() if count > 1}
+          collisions = {
+              name
+              for name, count in Counter(name.lower() for name in candidate_names.values()).items()
+              if count > 1
+          }
 
           page_name_by_rel = {}
+          used_page_names = set()
           for rel in relative_pages:
-              if candidate_names[rel] in collisions:
-                  page_name_by_rel[rel] = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
+              base_name = candidate_names[rel]
+              if base_name.lower() in collisions:
+                  page_name = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
               else:
-                  page_name_by_rel[rel] = candidate_names[rel]
+                  page_name = base_name
+
+              unique_name = page_name
+              suffix = 2
+              while unique_name.lower() in used_page_names:
+                  unique_name = f"{page_name}-{suffix}"
+                  suffix += 1
+
+              used_page_names.add(unique_name.lower())
+              page_name_by_rel[rel] = unique_name
 
           def normalize_rel_path(base_rel: str, link_rel: str) -> str:
               if link_rel.startswith("/"):
