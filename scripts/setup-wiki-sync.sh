@@ -7,9 +7,10 @@
 # DESCRIPTION
 # -----------
 # Automates the creation and deployment of a GitHub Actions workflow that
-# synchronizes Markdown documentation from a repository's docs/ directory
-# into its GitHub Wiki. This script uses the `gh` CLI to programmatically
-# create the workflow, merge the feature branch, and trigger initial sync.
+# synchronizes MkDocs-rendered documentation (including mkdocstrings output)
+# into GitHub Wiki. The workflow builds docs, extracts rendered HTML content,
+# converts to markdown, then pushes wiki-safe pages. This script uses `gh`
+# to create the workflow, merge the feature branch, and trigger initial sync.
 #
 # IMPLEMENTATION DETAILS
 # ----------------------
@@ -17,10 +18,11 @@
 # 1. WORKFLOW DESIGN (`.github/workflows/wiki-autogen.yml`)
 #    - Triggers on: push to main touching docs/, driver source, or config
 #    - Validates docs build with `mkdocs build` before sync
-#    - Syncs Markdown from docs/ tree into Wiki repository
+#    - Uses rendered `site/` output so mkdocstrings directives are materialized
+#    - Converts rendered HTML to markdown for Wiki via markdownify
 #    - Handles GitHub Wiki limitations:
 #      * Flattens nested paths (e.g., api/visa/dl3021 → dl3021)
-#      * Rewrites internal .md links to wiki-safe page targets
+#      * Rewrites internal .md/.html/route links to wiki-safe page targets
 #      * Detects case-insensitive collisions and disambiguates (e.g., ARCHITECTURE-2)
 #      * Maps docs/index.md → Wiki Home.md
 #      * Auto-generates _Sidebar.md and _Footer.md navigation
@@ -29,6 +31,7 @@
 #    - Parses all [label](target) Markdown links
 #    - Skips external URLs (http://, https://, mailto:) and anchors
 #    - Resolves relative paths (handles ../, ./) during path normalization
+#    - Supports source links written as .md, .html, or route-style paths
 #    - Maps source relative paths to flat wiki page names via collision detection
 #    - Result: docs/api/visa/dl3021.md → wiki link (dl3021) not (api/visa/dl3021)
 #
@@ -330,7 +333,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install mkdocs mkdocs-material "mkdocstrings[python]" pymdown-extensions
+                    pip install mkdocs mkdocs-material "mkdocstrings[python]" pymdown-extensions beautifulsoup4 markdownify
 
       - name: Validate documentation build
         run: mkdocs build
@@ -351,20 +354,25 @@ jobs:
           echo "Initialize Wiki once from the GitHub UI, then rerun this workflow."
           exit 1
 
-      - name: Generate Wiki pages from docs markdown
+            - name: Generate Wiki pages from rendered MkDocs output
         run: |
           python3 << 'PYTHON_EOF'
-          import shutil
           import re
+                    import shutil
           from collections import Counter
           from pathlib import Path
           from pathlib import PurePosixPath
+                    from bs4 import BeautifulSoup
+                    from markdownify import markdownify as md
 
           docs_dir = Path("docs")
+                    site_dir = Path("site")
           wiki_dir = Path("wiki-repo")
 
           if not docs_dir.exists():
               raise SystemExit("docs/ directory not found")
+                    if not site_dir.exists():
+                            raise SystemExit("site/ directory not found. Ensure `mkdocs build` ran successfully.")
 
           for item in wiki_dir.iterdir():
               if item.name == ".git":
@@ -376,6 +384,19 @@ jobs:
 
           source_pages = sorted(docs_dir.rglob("*.md"))
           relative_pages = [src.relative_to(docs_dir).as_posix() for src in source_pages]
+
+          route_by_rel = {}
+          rel_by_route = {}
+          for rel in relative_pages:
+              rel_path = PurePosixPath(rel)
+              if rel == "index.md":
+                  route = ""
+              elif rel_path.name == "index.md":
+                  route = rel_path.parent.as_posix()
+              else:
+                  route = rel_path.with_suffix("").as_posix()
+              route_by_rel[rel] = route
+              rel_by_route[route] = rel
 
           candidate_names = {}
           for rel in relative_pages:
@@ -425,6 +446,49 @@ jobs:
                   parts.append(part)
               return PurePosixPath(*parts).as_posix()
 
+          def normalize_route_path(base_rel: str, link_target: str) -> str:
+              base_route = route_by_rel[base_rel]
+
+              if link_target.startswith("/"):
+                  candidate = PurePosixPath(link_target.lstrip("/"))
+              else:
+                  candidate = PurePosixPath(base_route) / link_target
+
+              parts = []
+              for part in candidate.parts:
+                  if part in ("", "."):
+                      continue
+                  if part == "..":
+                      if parts:
+                          parts.pop()
+                      continue
+                  parts.append(part)
+
+              normalized = PurePosixPath(*parts).as_posix()
+              if normalized.endswith("/index"):
+                  normalized = normalized[: -len("/index")]
+              if normalized == "index":
+                  normalized = ""
+              return normalized.strip("/")
+
+          def resolve_docs_rel(base_rel: str, path_part: str):
+              if not path_part:
+                  return base_rel
+
+              if path_part.endswith(".md"):
+                  normalized = normalize_rel_path(base_rel, path_part)
+                  return normalized if normalized in page_name_by_rel else None
+
+              if path_part.endswith(".html"):
+                  html_no_ext = path_part[:-5]
+                  if html_no_ext.endswith("/index"):
+                      html_no_ext = html_no_ext[:-6]
+                  route = normalize_route_path(base_rel, html_no_ext)
+                  return rel_by_route.get(route)
+
+              route = normalize_route_path(base_rel, path_part)
+              return rel_by_route.get(route)
+
           def rewrite_links(markdown: str, base_rel: str) -> str:
               pattern = re.compile(r'\[(?P<label>[^\]]+)\]\((?P<target>[^)]+)\)')
 
@@ -436,30 +500,72 @@ jobs:
                       return match.group(0)
 
                   path_part, sep, fragment = target.partition("#")
-                  if not path_part.endswith(".md"):
+                  if not path_part:
                       return match.group(0)
 
-                  normalized = normalize_rel_path(base_rel, path_part)
-                  page_name = page_name_by_rel.get(normalized)
+                  normalized = resolve_docs_rel(base_rel, path_part)
+                  page_name = page_name_by_rel.get(normalized) if normalized else None
                   if not page_name:
-                      page_name = PurePosixPath(path_part).stem
+                      return match.group(0)
 
                   rewritten_target = f"{page_name}{sep}{fragment}" if sep else page_name
                   return f"[{label}]({rewritten_target})"
 
               return pattern.sub(_replace, markdown)
 
-          copied_pages = []
-          for src in source_pages:
-              rel = src.relative_to(docs_dir)
+          def rendered_html_for_rel(rel: str) -> Path:
+              rel_path = PurePosixPath(rel)
+              if rel == "index.md":
+                  candidate_paths = [site_dir / "index.html"]
+              elif rel_path.name == "index.md":
+                  candidate_paths = [site_dir / rel_path.parent / "index.html"]
+              else:
+                  candidate_paths = [
+                      site_dir / rel_path.with_suffix("") / "index.html",
+                      site_dir / rel_path.with_suffix(".html"),
+                  ]
 
-              page_name = page_name_by_rel[rel.as_posix()]
+              for candidate in candidate_paths:
+                  if candidate.exists():
+                      return candidate
+
+              tried = ", ".join(str(path) for path in candidate_paths)
+              raise FileNotFoundError(f"Rendered HTML not found for {rel}. Tried: {tried}")
+
+          def extract_main_content(html_text: str) -> str:
+              soup = BeautifulSoup(html_text, "html.parser")
+
+              article = soup.select_one("article.md-content__inner")
+              if article is None:
+                  article = soup.find("main")
+              if article is None:
+                  article = soup.body
+              if article is None:
+                  return html_text
+
+              for selector in [
+                  "a.headerlink",
+                  "a[aria-label='Permanent link']",
+                  ".md-content__button",
+                  ".mdx-badge",
+              ]:
+                  for element in article.select(selector):
+                      element.decompose()
+
+              return str(article)
+
+          copied_pages = []
+          for rel in relative_pages:
+              page_name = page_name_by_rel[rel]
               dst = wiki_dir / f"{page_name}.md"
 
               dst.parent.mkdir(parents=True, exist_ok=True)
-              content = src.read_text(encoding="utf-8")
-              content = rewrite_links(content, rel.as_posix())
-              banner = "_Auto-generated from `docs/` in the main repository. Edit source files, not the Wiki directly._\n\n"
+              rendered_html = rendered_html_for_rel(rel).read_text(encoding="utf-8")
+              main_html = extract_main_content(rendered_html)
+              content = md(main_html, heading_style="ATX")
+              content = re.sub(r"\n{3,}", "\n\n", content).strip() + "\n"
+              content = rewrite_links(content, rel)
+              banner = "_Auto-generated from MkDocs render output in the main repository (including mkdocstrings). Edit source files, not the Wiki directly._\n\n"
               dst.write_text(banner + content, encoding="utf-8")
               copied_pages.append(dst.relative_to(wiki_dir))
 
@@ -498,8 +604,9 @@ EOF
 generate_pr_body() {
     cat <<'EOF'
 ## Summary
-- Add GitHub Actions workflow to sync `docs/` markdown into GitHub Wiki
+- Add GitHub Actions workflow to sync MkDocs-rendered content into GitHub Wiki
 - Validate docs with `mkdocs build` before wiki sync
+- Render `mkdocstrings` output via MkDocs and convert rendered HTML back to markdown for Wiki
 - Handle GitHub Wiki URL limitations: flatten nested paths, rewrite links, detect/resolve case collisions
 - Map `docs/index.md` to `Home.md` and generate `_Sidebar.md`/`_Footer.md`
 
