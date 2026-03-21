@@ -25,7 +25,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.RSA3030 import RSA3030
+from lab_drivers.drivers.visa import RSA3030
 
 # Auto-connect (scans VISA resources + link-local IPs)
 rsa = RSA3030()

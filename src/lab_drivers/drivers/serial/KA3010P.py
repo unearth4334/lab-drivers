@@ -40,7 +40,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.KA3010P import KA3010P
+from lab_drivers.drivers.serial import KA3010P
 
 # Connect to power supply
 psu = KA3010P(com_port="COM4")

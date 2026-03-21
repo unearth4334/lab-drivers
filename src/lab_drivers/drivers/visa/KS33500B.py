@@ -41,7 +41,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.KS33500B import KS33500B
+from lab_drivers.drivers.visa import KS33500B
 
 # Auto-connect to waveform generator
 wfg = KS33500B()

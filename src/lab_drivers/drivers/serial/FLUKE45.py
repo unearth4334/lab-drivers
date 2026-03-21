@@ -40,7 +40,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.FLUKE45 import FLUKE45
+from lab_drivers.drivers.serial import FLUKE45
 
 # Connect to Fluke 45
 dmm = FLUKE45(com_port="COM3")

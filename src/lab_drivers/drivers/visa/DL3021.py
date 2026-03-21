@@ -41,7 +41,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.DL3021 import DL3021
+from lab_drivers.drivers.visa import DL3021
 
 # Auto-connect to electronic load
 load = DL3021()
