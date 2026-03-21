@@ -281,6 +281,13 @@ class DL3021:
             
         Raises:
             ConnectionError: If device not found or connection fails.
+
+        Returns:
+            None
+
+        Example:
+            >>> load = DL3021(auto_connect=False)
+            >>> load.connect(address="USB0::0x1AB1::...")
         """
         # 1) Try explicit address first
         explicit = address or self._address_hint
@@ -339,7 +346,15 @@ class DL3021:
         print(_SUCCESS_STYLE + f"Connected to {self.address}")
     
     def disconnect(self) -> None:
-        """Close the connection to the device."""
+        """
+        Close the connection to the device.
+
+        Returns:
+            None
+
+        Example:
+            >>> load.disconnect()
+        """
         if self.instrument is not None:
             try:
                 self.instrument.close()
@@ -411,6 +426,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> voltage = load.measure_voltage()
         """
         self._chk()
         command = ':MEAS:VOLT?'
@@ -428,6 +446,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> current = load.measure_current()
         """
         self._chk()
         command = ':MEAS:CURR?'
@@ -445,6 +466,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> power = load.measure_power()
         """
         self._chk()
         command = ':MEAS:POW?'
@@ -462,6 +486,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> resistance = load.measure_resistance()
         """
         self._chk()
         command = ':MEAS:RES?'
@@ -479,6 +506,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_slew_rate(0.1)
         """
         self._chk()
         command = f':SOURCE:CURRENT:SLEW {val}'
@@ -494,6 +527,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> status = load.is_enabled()
         """
         self._chk()
         command = ':SOURCE:INPUT:STAT?'
@@ -507,6 +543,12 @@ class DL3021:
         
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.enable()
         """
         self._chk()
         mode = self.query_mode()
@@ -533,6 +575,12 @@ class DL3021:
         
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.disable()
         """
         self._chk()
         print(Back.WHITE + Fore.BLACK + '\rProgrammable Load (DL3021):\t' + Back.RED + ' OFF ')
@@ -549,6 +597,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> status = load.input_status()
         """
         self._chk()
         command = ':SOURCE:INPUT:STAT?'
@@ -584,6 +635,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.select_mode("CURR")
         """
         self._chk()
         command = f':SOURCE:FUNCTION {mode}'
@@ -599,6 +656,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> mode = load.query_mode()
         """
         self._chk()
         command = ':SOURCE:FUNCTION?'
@@ -615,6 +675,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_cc_current(2.0)
         """
         self._chk()
         command = f':SOURCE:CURRENT:LEV:IMM {val}'
@@ -630,6 +696,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_cr_resistance(10.0)
         """
         self._chk()
         command = f':SOURCE:RES:LEV:IMM {val}'
@@ -645,6 +717,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_cp_power(50.0)
         """
         self._chk()
         command = f':SOURCE:POWER:LEV:IMM {val}'
@@ -660,6 +738,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_cv_voltage(12.0)
         """
         self._chk()
         command = f':SOURCE:VOLT:LEV:IMM {val}'
@@ -675,6 +759,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.set_cp_ilim(3.0)
         """
         self._chk()
         command = f':SOURCE:POWER:ILIM {val}'
@@ -690,6 +780,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> current = load.get_cc_current()
         """
         self._chk()
         command = ':SOURCE:CURRENT:LEV:IMM?'
@@ -706,6 +799,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> resistance = load.get_cr_resistance()
         """
         self._chk()
         command = ':SOURCE:RES:LEV:IMM?'
@@ -722,6 +818,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> power = load.get_cp_power()
         """
         self._chk()
         command = ':SOURCE:POWER:LEV:IMM?'
@@ -738,6 +837,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> voltage = load.get_cv_voltage()
         """
         self._chk()
         command = ':SOURCE:VOLT:LEV:IMM?'
@@ -757,6 +859,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> mean, stdev = load.measure_current_avg(20)
         """
         self._chk()
         
@@ -780,6 +885,9 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> mean, stdev = load.measure_volt_avg(20)
         """
         self._chk()
         
@@ -800,6 +908,12 @@ class DL3021:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.configure_output_sense(True)
         """
         self._chk()
         if val == True:
@@ -815,6 +929,12 @@ class DL3021:
         
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> load.reset()
         """
         self._chk()
         self.instrument.write("*RST")

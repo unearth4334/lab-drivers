@@ -327,6 +327,13 @@ class RSA3030:
                     Verify with *IDN? query.
             ip_address: IP address for Ethernet/LAN connection (e.g., "192.168.1.100").
                        If provided, constructs TCPIP resource string automatically.
+
+        Returns:
+            None
+
+        Example:
+            >>> rsa = RSA3030(auto_connect=False)
+            >>> rsa.connect(ip_address="192.168.1.100")
         """
         # 1) Try IP address connection if provided
         ip = ip_address or self._ip_address
@@ -591,7 +598,15 @@ class RSA3030:
         return None
 
     def disconnect(self):
-        """Close the VISA session."""
+        """
+        Close the VISA session.
+
+        Returns:
+            None
+
+        Example:
+            >>> rsa.disconnect()
+        """
         if self.instrument is not None:
             try:
                 self.instrument.close()
@@ -618,6 +633,9 @@ class RSA3030:
 
         Returns:
             str: Instrument identification string (manufacturer, model, serial, firmware).
+
+        Example:
+            >>> idn = rsa.get_identity()
         """
         self._chk()
         return self.instrument.query("*IDN?").strip()
@@ -836,6 +854,9 @@ class RSA3030:
 
         Raises:
             ValueError: If invalid item is requested.
+
+        Example:
+            >>> identity = rsa.get("identity")
         """
         k = item.strip().lower()
         if k == "identity":

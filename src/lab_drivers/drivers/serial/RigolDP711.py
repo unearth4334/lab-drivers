@@ -86,7 +86,20 @@ class RigolDP711:
             self.connect(com_port=com_port, baud_rate=baud_rate)
     
     def connect(self, com_port: Optional[str] = None, baud_rate: int = 9600) -> None:
-        """Establish connection to RigolDP711 power supply."""
+        """
+        Establish connection to RigolDP711 power supply.
+
+        Args:
+            com_port: Optional serial port (for example, ``"COM4"`` or ``"/dev/ttyUSB0"``).
+            baud_rate: Serial baud rate.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu = RigolDP711(auto_connect=False)
+            >>> psu.connect(com_port="/dev/ttyUSB0")
+        """
         # Try explicit COM port first
         explicit_port = com_port or self._com_port_hint
         
@@ -170,7 +183,15 @@ class RigolDP711:
             raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to {explicit_port}: {e}")
 
     def disconnect(self) -> None:
-        """Close the serial connection to the device."""
+        """
+        Close the serial connection to the device.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.disconnect()
+        """
         if self.ser is not None and self.ser.is_open:
             try:
                 self.ser.close()
@@ -205,7 +226,25 @@ class RigolDP711:
         return raw.decode('ascii', errors='ignore').strip()
     
     def get(self, item: str, channel: int = 1) -> float:
-        """Retrieve measurement value by name."""
+        """
+        Retrieve a measurement value by item name.
+
+        Args:
+            item: Measurement selector. Supported values are ``"CURR"``, ``"CURRENT"``,
+                ``"VOLT"``, and ``"VOLTAGE"`` (case-insensitive).
+            channel: Unused placeholder for API compatibility.
+
+        Returns:
+            Measurement value in base SI units (A or V).
+
+        Raises:
+            ValueError: If ``item`` is not supported.
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> volts = psu.get("VOLT")
+            >>> amps = psu.get("CURRENT")
+        """
         self._chk()
 
         item_upper = item.strip().upper()
@@ -226,7 +265,22 @@ class RigolDP711:
         return items[item_upper]()
 
     def set_voltage(self, voltage: float) -> None:
-        """Set the output voltage."""
+        """
+        Set the output voltage setpoint.
+
+        Args:
+            voltage: Target voltage in volts. Valid range is 0 to 30.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If ``voltage`` is outside the supported range.
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> psu.set_voltage(12.0)
+        """
         self._chk()
         
         if not 0 <= voltage <= 30:
@@ -236,7 +290,22 @@ class RigolDP711:
         self._write(command)
 
     def set_current(self, current: float) -> None:
-        """Set the output current limit."""
+        """
+        Set the output current limit.
+
+        Args:
+            current: Current limit in amperes. Valid range is 0 to 5.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If ``current`` is outside the supported range.
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> psu.set_current(1.5)
+        """
         self._chk()
         
         if not 0 <= current <= 5:
@@ -246,7 +315,19 @@ class RigolDP711:
         self._write(command)
 
     def measure_voltage(self) -> float:
-        """Measure the actual output voltage."""
+        """
+        Measure the actual output voltage.
+
+        Returns:
+            Measured output voltage in volts.
+
+        Raises:
+            ValueError: If the returned value cannot be parsed.
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> voltage = psu.measure_voltage()
+        """
         try:
             response = self._query(':MEAS:VOLT?')
             return float(response)
@@ -254,7 +335,19 @@ class RigolDP711:
             raise ValueError(_ERROR_STYLE + f"Failed to parse voltage measurement: {e}")
 
     def measure_current(self) -> float:
-        """Measure the actual output current."""
+        """
+        Measure the actual output current.
+
+        Returns:
+            Measured output current in amperes.
+
+        Raises:
+            ValueError: If the returned value cannot be parsed.
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> current = psu.measure_current()
+        """
         try:
             response = self._query(':MEAS:CURR?')
             return float(response)
@@ -262,7 +355,21 @@ class RigolDP711:
             raise ValueError(_ERROR_STYLE + f"Failed to parse current measurement: {e}")
 
     def set_output_state(self, state: bool) -> None:
-        """Enable or disable the power supply output."""
+        """
+        Enable or disable the power supply output.
+
+        Args:
+            state: ``True`` to enable output, ``False`` to disable output.
+
+        Returns:
+            None
+
+        Raises:
+            ConnectionError: If the device is not connected.
+
+        Example:
+            >>> psu.set_output_state(True)
+        """
         self._chk()
         
         if state:
@@ -275,9 +382,25 @@ class RigolDP711:
         self._write(command)
 
     def turn_on(self) -> None:
-        """Turn on the power supply output."""
+        """
+        Turn on the power supply output.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.turn_on()
+        """
         self.set_output_state(True)
 
     def turn_off(self) -> None:
-        """Turn off the power supply output."""
+        """
+        Turn off the power supply output.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.turn_off()
+        """
         self.set_output_state(False)
