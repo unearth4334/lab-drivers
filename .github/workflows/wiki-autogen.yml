@@ -80,68 +80,68 @@ jobs:
               else:
                   item.unlink()
 
-            source_pages = sorted(docs_dir.rglob("*.md"))
-            relative_pages = [src.relative_to(docs_dir).as_posix() for src in source_pages]
+          source_pages = sorted(docs_dir.rglob("*.md"))
+          relative_pages = [src.relative_to(docs_dir).as_posix() for src in source_pages]
 
-            candidate_names = {}
-            for rel in relative_pages:
+          candidate_names = {}
+          for rel in relative_pages:
               rel_path = PurePosixPath(rel)
               if rel == "index.md":
-                candidate_names[rel] = "Home"
+                  candidate_names[rel] = "Home"
               else:
-                candidate_names[rel] = rel_path.stem
+                  candidate_names[rel] = rel_path.stem
 
-            collisions = {name for name, count in Counter(candidate_names.values()).items() if count > 1}
+          collisions = {name for name, count in Counter(candidate_names.values()).items() if count > 1}
 
-            page_name_by_rel = {}
-            for rel in relative_pages:
+          page_name_by_rel = {}
+          for rel in relative_pages:
               if candidate_names[rel] in collisions:
-                page_name_by_rel[rel] = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
+                  page_name_by_rel[rel] = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
               else:
-                page_name_by_rel[rel] = candidate_names[rel]
+                  page_name_by_rel[rel] = candidate_names[rel]
 
-            def normalize_rel_path(base_rel: str, link_rel: str) -> str:
+          def normalize_rel_path(base_rel: str, link_rel: str) -> str:
               if link_rel.startswith("/"):
-                candidate = PurePosixPath(link_rel.lstrip("/"))
+                  candidate = PurePosixPath(link_rel.lstrip("/"))
               else:
-                candidate = PurePosixPath(base_rel).parent / link_rel
+                  candidate = PurePosixPath(base_rel).parent / link_rel
               parts = []
               for part in candidate.parts:
-                if part in ("", "."):
-                  continue
-                if part == "..":
-                  if parts:
-                    parts.pop()
-                  continue
-                parts.append(part)
+                  if part in ("", "."):
+                      continue
+                  if part == "..":
+                      if parts:
+                          parts.pop()
+                      continue
+                  parts.append(part)
               return PurePosixPath(*parts).as_posix()
 
-            def rewrite_links(markdown: str, base_rel: str) -> str:
+          def rewrite_links(markdown: str, base_rel: str) -> str:
               pattern = re.compile(r'\[(?P<label>[^\]]+)\]\((?P<target>[^)]+)\)')
 
               def _replace(match):
-                label = match.group("label")
-                target = match.group("target").strip()
+                  label = match.group("label")
+                  target = match.group("target").strip()
 
-                if target.startswith(("http://", "https://", "mailto:", "#")):
-                  return match.group(0)
+                  if target.startswith(("http://", "https://", "mailto:", "#")):
+                      return match.group(0)
 
-                path_part, sep, fragment = target.partition("#")
-                if not path_part.endswith(".md"):
-                  return match.group(0)
+                  path_part, sep, fragment = target.partition("#")
+                  if not path_part.endswith(".md"):
+                      return match.group(0)
 
-                normalized = normalize_rel_path(base_rel, path_part)
-                page_name = page_name_by_rel.get(normalized)
-                if not page_name:
-                  page_name = PurePosixPath(path_part).stem
+                  normalized = normalize_rel_path(base_rel, path_part)
+                  page_name = page_name_by_rel.get(normalized)
+                  if not page_name:
+                      page_name = PurePosixPath(path_part).stem
 
-                rewritten_target = f"{page_name}{sep}{fragment}" if sep else page_name
-                return f"[{label}]({rewritten_target})"
+                  rewritten_target = f"{page_name}{sep}{fragment}" if sep else page_name
+                  return f"[{label}]({rewritten_target})"
 
               return pattern.sub(_replace, markdown)
 
           copied_pages = []
-            for src in source_pages:
+          for src in source_pages:
               rel = src.relative_to(docs_dir)
 
               page_name = page_name_by_rel[rel.as_posix()]
