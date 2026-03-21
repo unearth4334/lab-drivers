@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install mkdocs mkdocs-material "mkdocstrings[python]" pymdown-extensions
+          pip install mkdocs mkdocs-material "mkdocstrings[python]" pymdown-extensions beautifulsoup4 markdownify
 
       - name: Validate documentation build
         run: mkdocs build
@@ -57,130 +57,235 @@ jobs:
           echo "Initialize Wiki once from the GitHub UI, then rerun this workflow."
           exit 1
 
-      - name: Generate Wiki pages from docs markdown
+      - name: Generate Wiki pages from rendered MkDocs output
         run: |
           python3 << 'EOF'
-          import shutil
           import re
+          import shutil
           from collections import Counter
           from pathlib import Path
           from pathlib import PurePosixPath
 
+          from bs4 import BeautifulSoup
+          from markdownify import markdownify as md
+
           docs_dir = Path("docs")
+          site_dir = Path("site")
           wiki_dir = Path("wiki-repo")
 
           if not docs_dir.exists():
-              raise SystemExit("docs/ directory not found")
+            raise SystemExit("docs/ directory not found")
+          if not site_dir.exists():
+            raise SystemExit("site/ directory not found. Ensure `mkdocs build` ran successfully.")
 
           for item in wiki_dir.iterdir():
-              if item.name == ".git":
-                  continue
-              if item.is_dir():
-                  shutil.rmtree(item)
-              else:
-                  item.unlink()
+            if item.name == ".git":
+              continue
+            if item.is_dir():
+              shutil.rmtree(item)
+            else:
+              item.unlink()
 
           source_pages = sorted(docs_dir.rglob("*.md"))
           relative_pages = [src.relative_to(docs_dir).as_posix() for src in source_pages]
 
+          route_by_rel = {}
+          rel_by_route = {}
+          for rel in relative_pages:
+            rel_path = PurePosixPath(rel)
+            if rel == "index.md":
+              route = ""
+            elif rel_path.name == "index.md":
+              route = rel_path.parent.as_posix()
+            else:
+              route = rel_path.with_suffix("").as_posix()
+            route_by_rel[rel] = route
+            rel_by_route[route] = rel
+
           candidate_names = {}
           for rel in relative_pages:
-              rel_path = PurePosixPath(rel)
-              if rel == "index.md":
-                  candidate_names[rel] = "Home"
-              else:
-                  candidate_names[rel] = rel_path.stem
+            rel_path = PurePosixPath(rel)
+            if rel == "index.md":
+              candidate_names[rel] = "Home"
+            else:
+              candidate_names[rel] = rel_path.stem
 
           collisions = {
-              name
-              for name, count in Counter(name.lower() for name in candidate_names.values()).items()
-              if count > 1
+            name
+            for name, count in Counter(name.lower() for name in candidate_names.values()).items()
+            if count > 1
           }
 
           page_name_by_rel = {}
           used_page_names = set()
           for rel in relative_pages:
-              base_name = candidate_names[rel]
-              if base_name.lower() in collisions:
-                  page_name = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
-              else:
-                  page_name = base_name
+            base_name = candidate_names[rel]
+            if base_name.lower() in collisions:
+              page_name = PurePosixPath(rel).with_suffix("").as_posix().replace("/", "-")
+            else:
+              page_name = base_name
 
-              unique_name = page_name
-              suffix = 2
-              while unique_name.lower() in used_page_names:
-                  unique_name = f"{page_name}-{suffix}"
-                  suffix += 1
+            unique_name = page_name
+            suffix = 2
+            while unique_name.lower() in used_page_names:
+              unique_name = f"{page_name}-{suffix}"
+              suffix += 1
 
-              used_page_names.add(unique_name.lower())
-              page_name_by_rel[rel] = unique_name
+            used_page_names.add(unique_name.lower())
+            page_name_by_rel[rel] = unique_name
 
           def normalize_rel_path(base_rel: str, link_rel: str) -> str:
-              if link_rel.startswith("/"):
-                  candidate = PurePosixPath(link_rel.lstrip("/"))
-              else:
-                  candidate = PurePosixPath(base_rel).parent / link_rel
-              parts = []
-              for part in candidate.parts:
-                  if part in ("", "."):
-                      continue
-                  if part == "..":
-                      if parts:
-                          parts.pop()
-                      continue
-                  parts.append(part)
-              return PurePosixPath(*parts).as_posix()
+            if link_rel.startswith("/"):
+              candidate = PurePosixPath(link_rel.lstrip("/"))
+            else:
+              candidate = PurePosixPath(base_rel).parent / link_rel
+
+            parts = []
+            for part in candidate.parts:
+              if part in ("", "."):
+                continue
+              if part == "..":
+                if parts:
+                  parts.pop()
+                continue
+              parts.append(part)
+            return PurePosixPath(*parts).as_posix()
+
+          def normalize_route_path(base_rel: str, link_target: str) -> str:
+            base_route = route_by_rel[base_rel]
+
+            if link_target.startswith("/"):
+              candidate = PurePosixPath(link_target.lstrip("/"))
+            else:
+              candidate = PurePosixPath(base_route) / link_target
+
+            parts = []
+            for part in candidate.parts:
+              if part in ("", "."):
+                continue
+              if part == "..":
+                if parts:
+                  parts.pop()
+                continue
+              parts.append(part)
+
+            normalized = PurePosixPath(*parts).as_posix()
+            if normalized.endswith("/index"):
+              normalized = normalized[: -len("/index")]
+            if normalized == "index":
+              normalized = ""
+            return normalized.strip("/")
+
+          def resolve_docs_rel(base_rel: str, path_part: str):
+            if not path_part:
+              return base_rel
+
+            if path_part.endswith(".md"):
+              normalized = normalize_rel_path(base_rel, path_part)
+              return normalized if normalized in page_name_by_rel else None
+
+            if path_part.endswith(".html"):
+              html_no_ext = path_part[:-5]
+              if html_no_ext.endswith("/index"):
+                html_no_ext = html_no_ext[:-6]
+              route = normalize_route_path(base_rel, html_no_ext)
+              return rel_by_route.get(route)
+
+            route = normalize_route_path(base_rel, path_part)
+            return rel_by_route.get(route)
 
           def rewrite_links(markdown: str, base_rel: str) -> str:
-              pattern = re.compile(r'\[(?P<label>[^\]]+)\]\((?P<target>[^)]+)\)')
+            pattern = re.compile(r'\[(?P<label>[^\]]+)\]\((?P<target>[^)]+)\)')
 
-              def _replace(match):
-                  label = match.group("label")
-                  target = match.group("target").strip()
+            def _replace(match):
+              label = match.group("label")
+              target = match.group("target").strip()
 
-                  if target.startswith(("http://", "https://", "mailto:", "#")):
-                      return match.group(0)
+              if target.startswith(("http://", "https://", "mailto:", "#")):
+                return match.group(0)
 
-                  path_part, sep, fragment = target.partition("#")
-                  if not path_part.endswith(".md"):
-                      return match.group(0)
+              path_part, sep, fragment = target.partition("#")
+              if not path_part:
+                return match.group(0)
 
-                  normalized = normalize_rel_path(base_rel, path_part)
-                  page_name = page_name_by_rel.get(normalized)
-                  if not page_name:
-                      page_name = PurePosixPath(path_part).stem
+              normalized = resolve_docs_rel(base_rel, path_part)
+              page_name = page_name_by_rel.get(normalized) if normalized else None
+              if not page_name:
+                return match.group(0)
 
-                  rewritten_target = f"{page_name}{sep}{fragment}" if sep else page_name
-                  return f"[{label}]({rewritten_target})"
+              rewritten_target = f"{page_name}{sep}{fragment}" if sep else page_name
+              return f"[{label}]({rewritten_target})"
 
-              return pattern.sub(_replace, markdown)
+            return pattern.sub(_replace, markdown)
+
+          def rendered_html_for_rel(rel: str) -> Path:
+            rel_path = PurePosixPath(rel)
+            if rel == "index.md":
+              candidate_paths = [site_dir / "index.html"]
+            elif rel_path.name == "index.md":
+              candidate_paths = [site_dir / rel_path.parent / "index.html"]
+            else:
+              candidate_paths = [
+                site_dir / rel_path.with_suffix("") / "index.html",
+                site_dir / rel_path.with_suffix(".html"),
+              ]
+
+            for candidate in candidate_paths:
+              if candidate.exists():
+                return candidate
+
+            tried = ", ".join(str(path) for path in candidate_paths)
+            raise FileNotFoundError(f"Rendered HTML not found for {rel}. Tried: {tried}")
+
+          def extract_main_content(html_text: str) -> str:
+            soup = BeautifulSoup(html_text, "html.parser")
+
+            article = soup.select_one("article.md-content__inner")
+            if article is None:
+              article = soup.find("main")
+            if article is None:
+              article = soup.body
+            if article is None:
+              return html_text
+
+            for selector in [
+              "a.headerlink",
+              "a[aria-label='Permanent link']",
+              ".md-content__button",
+              ".mdx-badge",
+            ]:
+              for element in article.select(selector):
+                element.decompose()
+
+            return str(article)
 
           copied_pages = []
-          for src in source_pages:
-              rel = src.relative_to(docs_dir)
+          for rel in relative_pages:
+            page_name = page_name_by_rel[rel]
+            dst = wiki_dir / f"{page_name}.md"
 
-              page_name = page_name_by_rel[rel.as_posix()]
-              dst = wiki_dir / f"{page_name}.md"
-
-              dst.parent.mkdir(parents=True, exist_ok=True)
-              content = src.read_text(encoding="utf-8")
-              content = rewrite_links(content, rel.as_posix())
-              banner = "_Auto-generated from `docs/` in the main repository. Edit source files, not the Wiki directly._\n\n"
-              dst.write_text(banner + content, encoding="utf-8")
-              copied_pages.append(dst.relative_to(wiki_dir))
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            rendered_html = rendered_html_for_rel(rel).read_text(encoding="utf-8")
+            main_html = extract_main_content(rendered_html)
+            content = md(main_html, heading_style="ATX")
+            content = re.sub(r"\n{3,}", "\n\n", content).strip() + "\n"
+            content = rewrite_links(content, rel)
+            banner = "_Auto-generated from MkDocs render output in the main repository (including mkdocstrings). Edit source files, not the Wiki directly._\n\n"
+            dst.write_text(banner + content, encoding="utf-8")
+            copied_pages.append(dst.relative_to(wiki_dir))
 
           sidebar_lines = ["# Documentation", "", "- [[Home]]"]
           for page in sorted(copied_pages):
-              if str(page) == "Home.md":
-                  continue
-              page_name = str(page.with_suffix(""))
-              sidebar_lines.append(f"- [[{page_name}|{page_name}]]")
+            if str(page) == "Home.md":
+              continue
+            page_name = str(page.with_suffix(""))
+            sidebar_lines.append(f"- [[{page_name}|{page_name}]]")
 
           (wiki_dir / "_Sidebar.md").write_text("\n".join(sidebar_lines) + "\n", encoding="utf-8")
 
           footer = (
-              "This Wiki is synchronized by GitHub Actions from the repository docs. "
-              "Create pull requests against `docs/` to update content."
+            "This Wiki is synchronized by GitHub Actions from the repository docs. "
+            "Create pull requests against `docs/` to update content."
           )
           (wiki_dir / "_Footer.md").write_text(footer + "\n", encoding="utf-8")
           EOF
