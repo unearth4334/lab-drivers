@@ -1,0 +1,15 @@
+.md-typeset table code {
+  font-size: 0.85em;
+}
+
+.md-typeset h1 {
+  margin-bottom: 0.4rem;
+}
+
+.md-typeset .admonition {
+  border-left-width: 0.2rem;
+}
+
+.md-typeset pre > code {
+  border-radius: 0.3rem;
+}

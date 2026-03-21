@@ -40,7 +40,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.KA3010P import KA3010P
+from lab_drivers.drivers.serial import KA3010P
 
 # Connect to power supply
 psu = KA3010P(com_port="COM4")
@@ -197,6 +197,13 @@ class KA3010P:
             
         Raises:
             ConnectionError: If device not found or connection fails.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu = KA3010P(auto_connect=False)
+            >>> psu.connect(com_port="/dev/ttyUSB0")
         """
         # 1) Try explicit COM port first
         explicit_port = com_port or self._com_port_hint
@@ -253,7 +260,15 @@ class KA3010P:
 
     
     def disconnect(self) -> None:
-        """Close the serial connection to the device."""
+        """
+        Close the serial connection to the device.
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.disconnect()
+        """
         if self.ser is not None and self.ser.is_open:
             try:
                 self.ser.close()
@@ -315,6 +330,12 @@ class KA3010P:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.set_voltage(12.0)
         """
         self._chk()
         time.sleep(_DELAY)
@@ -330,6 +351,12 @@ class KA3010P:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.set_current(1.0)
         """
         self._chk()
         time.sleep(_DELAY)
@@ -346,6 +373,9 @@ class KA3010P:
         Raises:
             ConnectionError: If not connected to device
             ValueError: If response cannot be parsed
+
+        Example:
+            >>> setpoint = psu.get_voltage()
         """
         self._chk()
         command = 'VSET1?'
@@ -371,6 +401,9 @@ class KA3010P:
         Raises:
             ConnectionError: If not connected to device
             ValueError: If response cannot be parsed
+
+        Example:
+            >>> current_limit = psu.get_current()
         """
         self._chk()
         command = 'ISET1?'
@@ -396,6 +429,9 @@ class KA3010P:
         Raises:
             ConnectionError: If not connected to device
             ValueError: If response cannot be parsed
+
+        Example:
+            >>> voltage = psu.measure_voltage()
         """
         self._chk()
         command = 'VOUT1?'
@@ -421,6 +457,9 @@ class KA3010P:
         Raises:
             ConnectionError: If not connected to device
             ValueError: If response cannot be parsed
+
+        Example:
+            >>> current = psu.measure_current()
         """
         self._chk()
         command = 'IOUT1?'
@@ -442,6 +481,12 @@ class KA3010P:
         
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.turn_on()
         """
         self._chk()
         time.sleep(_DELAY)
@@ -454,6 +499,12 @@ class KA3010P:
         
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> psu.turn_off()
         """
         self._chk()
         time.sleep(_DELAY)

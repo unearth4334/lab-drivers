@@ -21,10 +21,20 @@ dependencies = [
 visa = ["pyvisa>=1.11"]
 serial = ["pyserial>=3.5"]
 plot = ["matplotlib>=3.5"]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.30",
+  "pymdown-extensions>=10.0"
+]
 all = [
   "pyvisa>=1.11",
   "pyserial>=3.5",
-  "matplotlib>=3.5"
+  "matplotlib>=3.5",
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.30",
+  "pymdown-extensions>=10.0"
 ]
 
 [tool.setuptools]

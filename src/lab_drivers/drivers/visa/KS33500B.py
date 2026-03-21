@@ -41,7 +41,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.KS33500B import KS33500B
+from lab_drivers.drivers.visa import KS33500B
 
 # Auto-connect to waveform generator
 wfg = KS33500B()
@@ -287,6 +287,13 @@ class KS33500B:
             
         Raises:
             ConnectionError: If device not found or connection fails.
+
+        Returns:
+            None
+
+        Example:
+            >>> gen = KS33500B(auto_connect=False)
+            >>> gen.connect(address="USB0::0x0957::...")
         """
         # 1) Try explicit address first
         explicit = address or self._address_hint
@@ -345,7 +352,15 @@ class KS33500B:
         print(_SUCCESS_STYLE + f"Connected to {self.address}")
     
     def disconnect(self) -> None:
-        """Close the connection to the device."""
+        """
+        Close the connection to the device.
+
+        Returns:
+            None
+
+        Example:
+            >>> gen.disconnect()
+        """
         if self.instrument is not None:
             try:
                 self.instrument.close()
@@ -371,6 +386,12 @@ class KS33500B:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> gen.set_squ_dcyc(50.0, source=1)
         """
         self._chk()
         
@@ -390,6 +411,12 @@ class KS33500B:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> gen.set_squ_freq(1_000.0, source=1)
         """
         self._chk()
         
@@ -409,6 +436,12 @@ class KS33500B:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> gen.set_squ_amp(2.0, source=1)
         """
         self._chk()
         
@@ -428,6 +461,12 @@ class KS33500B:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Returns:
+            None
+
+        Example:
+            >>> gen.set_squ_offset(0.5, source=1)
         """
         self._chk()
         

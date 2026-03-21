@@ -1,0 +1,125 @@
+name: Sync Docs to GitHub Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'src/lab_drivers/**/*.py'
+      - 'mkdocs.yml'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+concurrency:
+  group: wiki-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material "mkdocstrings[python]" pymdown-extensions
+
+      - name: Validate documentation build
+        run: mkdocs build
+
+      - name: Checkout Wiki repository
+        id: checkout_wiki
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: wiki-repo
+        continue-on-error: true
+
+      - name: Fail if Wiki is not initialized
+        if: steps.checkout_wiki.outcome == 'failure'
+        run: |
+          echo "GitHub Wiki repository not found for this repo."
+          echo "Initialize Wiki once from the GitHub UI, then rerun this workflow."
+          exit 1
+
+      - name: Generate Wiki pages from docs markdown
+        run: |
+          python3 << 'EOF'
+          import shutil
+          import re
+          from pathlib import Path
+
+          docs_dir = Path("docs")
+          wiki_dir = Path("wiki-repo")
+
+          if not docs_dir.exists():
+              raise SystemExit("docs/ directory not found")
+
+          for item in wiki_dir.iterdir():
+              if item.name == ".git":
+                  continue
+              if item.is_dir():
+                  shutil.rmtree(item)
+              else:
+                  item.unlink()
+
+          copied_pages = []
+          for src in docs_dir.rglob("*.md"):
+              rel = src.relative_to(docs_dir)
+
+              if src.name.lower() == "index.md" and rel.parent == Path('.'):
+                  dst = wiki_dir / "Home.md"
+              else:
+                  dst = wiki_dir / rel
+
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              content = src.read_text(encoding="utf-8")
+              content = re.sub(r'\(([^)]+)\.md(#[^)]+)?\)', r'(\1\2)', content)
+              banner = "_Auto-generated from `docs/` in the main repository. Edit source files, not the Wiki directly._\n\n"
+              dst.write_text(banner + content, encoding="utf-8")
+              copied_pages.append(dst.relative_to(wiki_dir))
+
+          sidebar_lines = ["# Documentation", "", "- [[Home]]"]
+          for page in sorted(copied_pages):
+              if str(page) == "Home.md":
+                  continue
+              page_name = str(page.with_suffix(""))
+              sidebar_lines.append(f"- [[{page_name}|{page_name}]]")
+
+          (wiki_dir / "_Sidebar.md").write_text("\n".join(sidebar_lines) + "\n", encoding="utf-8")
+
+          footer = (
+              "This Wiki is synchronized by GitHub Actions from the repository docs. "
+              "Create pull requests against `docs/` to update content."
+          )
+          (wiki_dir / "_Footer.md").write_text(footer + "\n", encoding="utf-8")
+          EOF
+
+      - name: Commit and push to Wiki
+        run: |
+          cd wiki-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git status --porcelain | grep . >/dev/null; then
+            git add .
+            git commit -m "docs(wiki): sync from docs/ [skip ci]"
+            git push origin HEAD:master
+          else
+            echo "No changes to commit"
+          fi

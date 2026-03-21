@@ -52,7 +52,7 @@ Power Supply Specifications
 Basic Usage
 -----------
 ```python
-from libs.StanfordPS310 import StanfordPS310
+from lab_drivers.drivers.visa import StanfordPS310
 
 # Auto-connect to PS310 (negative polarity model)
 hvps = StanfordPS310()

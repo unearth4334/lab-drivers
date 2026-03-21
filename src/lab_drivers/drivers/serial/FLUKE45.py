@@ -40,7 +40,7 @@ Features
 Basic Usage
 -----------
 ```python
-from libs.FLUKE45 import FLUKE45
+from lab_drivers.drivers.serial import FLUKE45
 
 # Connect to Fluke 45
 dmm = FLUKE45(com_port="COM3")
@@ -187,6 +187,13 @@ class FLUKE45:
             
         Raises:
             ConnectionError: If device not found or connection fails.
+
+        Returns:
+            None
+
+        Example:
+            >>> dmm = FLUKE45(auto_connect=False)
+            >>> dmm.connect(com_port="/dev/ttyUSB0")
         """
         # 1) Try explicit COM port first
         explicit_port = com_port or self._com_port_hint
@@ -243,7 +250,15 @@ class FLUKE45:
             raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to {explicit_port}: {e}")
     
     def disconnect(self) -> None:
-        """Close the serial connection to the device."""
+        """
+        Close the serial connection to the device.
+
+        Returns:
+            None
+
+        Example:
+            >>> dmm.disconnect()
+        """
         if self.ser is not None and self.ser.is_open:
             try:
                 self.ser.close()
@@ -269,6 +284,9 @@ class FLUKE45:
         Raises:
             ConnectionError: If not connected to device
             ValueError: If measurement fails or returns invalid data
+
+        Example:
+            >>> voltage = dmm.measure_voltage()
         """
         self._chk()
         
@@ -301,6 +319,9 @@ class FLUKE45:
         
         Returns:
             Voltage measurement in volts
+
+        Example:
+            >>> voltage = dmm.meas()
         """
         import warnings
         warnings.warn("meas() is deprecated, use measure_voltage()", DeprecationWarning, stacklevel=2)
@@ -318,6 +339,9 @@ class FLUKE45:
             
         Raises:
             ConnectionError: If not connected to device
+
+        Example:
+            >>> mean, stdev = dmm.calculate_statistics(50)
         """
         self._chk()
         
@@ -338,6 +362,9 @@ class FLUKE45:
             
         Returns:
             Tuple of (mean, standard_deviation)
+
+        Example:
+            >>> mean, stdev = dmm.measure_avg(20)
         """
         import warnings
         warnings.warn("measure_avg() is deprecated, use calculate_statistics()", DeprecationWarning, stacklevel=2)

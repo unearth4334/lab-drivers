@@ -1,0 +1,120 @@
+site_name: Lab Drivers API Documentation
+site_description: Complete API reference for laboratory measurement and control instruments
+site_author: Lab Automation Team
+site_url: https://lab-drivers.local
+
+# Theme configuration
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: blue
+      accent: orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Installation: install.md
+  - Getting Started: getting-started.md
+  - API Reference:
+    - api/index.md
+    - Serial Drivers:
+      - RigolDP711: api/serial/rigoldp711.md
+      - KA3010P: api/serial/ka3010p.md
+      - FLUKE45: api/serial/fluke45.md
+    - VISA Drivers:
+      - RSA3030: api/visa/rsa3030.md
+      - DL3021: api/visa/dl3021.md
+      - StanfordPS310: api/visa/stanfordps310.md
+      - KS33500B: api/visa/ks33500b.md
+  - Examples:
+    - Quick Start: examples/quickstart.md
+    - Power Supplies: examples/power-supplies.md
+    - Measurement Devices: examples/measurement-devices.md
+    - Waveform Generation: examples/waveform-generation.md
+    - Spectrum Analysis: examples/spectrum-analysis.md
+  - Architecture: architecture.md
+  - Legacy Architecture: ARCHITECTURE.md
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_object_full_path: false
+            docstring_style: numpy
+            members_order: source
+            merge_init_into_class: true
+            filters:
+              - "!^_"  # Hide private members
+
+# Markdown extensions
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      use_pygments: true
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+# Extra CSS
+extra_css:
+  - css/custom.css
+
+# Extra JavaScript for math rendering
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Footer
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-org/lab-drivers
+
+# Build options
+docs_dir: docs
+site_dir: site
+strict: false
