@@ -222,33 +222,10 @@ _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.05
 
 class DL3021:
-    """
-    Driver for DL3021 Programmable Electronic Load.
-    
-    This class provides methods for connecting to and controlling a
-    DL3021 electronic load via VISA interface.
-    
-    Supports multiple operating modes:
-    - CC (Constant Current)
-    - CV (Constant Voltage)
-    - CR (Constant Resistance)
-    - CP (Constant Power)
-    
-    Attributes:
-        rm: PyVISA ResourceManager instance
-        address: Device VISA address
-        instrument: Active connection handle
-        status: Connection status ("Connected" or "Not Connected")
-        loading: Loading indicator helper
-        
-    Example:
-        >>> load = DL3021()
-        >>> load.select_mode('CURR')
-        >>> load.set_cc_current(1.0)
-        >>> load.enable()
-        >>> voltage = load.measure_voltage()
-        >>> load.disable()
-        >>> load.disconnect()
+    """Rigol DL3021 electronic-load driver.
+
+    VISA-backed driver supporting load mode selection, setpoint control, and
+    measurement/getter methods for automated power testing.
     """
     
     def __init__(self, auto_connect: bool = True, address: Optional[str] = None):

@@ -134,24 +134,10 @@ _WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.01  # in seconds
 
 class FLUKE45:
-    """
-    Driver for Fluke 45 Digital Multimeter.
-    
-    This class provides methods for connecting to and controlling a
-    Fluke 45 multimeter via RS-232 serial interface.
-    
-    Attributes:
-        ser: Serial connection object
-        address: COM port address
-        status: Connection status ("Connected" or "Not Connected")
-        identity: Device identification string
-        debug: Enable/disable debug printing
-        
-    Example:
-        >>> dmm = FLUKE45()
-        >>> voltage = dmm.measure_voltage()
-        >>> print(f"Voltage: {voltage:.4f} V")
-        >>> dmm.disconnect()
+    """Fluke 45 bench multimeter driver.
+
+    Serial-backed driver exposing connection helpers, direct measurement methods,
+    and a generic `get()` interface for data-logger workflows.
     """
     
     def __init__(self, auto_connect: bool = True, com_port: Optional[str] = None, baud_rate: int = 9600, debug: bool = False):

@@ -27,41 +27,10 @@ _DELAY = 0.2   # inter-command delay (s)
 _IDN_DELAY = 0.5  # longer wait after *IDN? on first connect
 
 class RigolDP711:
-    """
-    Driver for Rigol DP711 Programmable DC Power Supply.
-    
-    This class provides methods for connecting to and controlling a
-    DP711 power supply via RS-232 serial interface (USB-to-RS232 adapter).
-    
-    Features
-    --------
-    - Auto-detection of USB-to-serial ports
-    - Voltage and current measurement/control
-    - Output enable/disable
-    - Simple command-based interface
-    
-    Basic Usage
-    -----------
-    ```python
-    from lab_drivers.drivers.serial.RigolDP711 import RigolDP711
-    
-    # Auto-connect to first available DP711
-    psu = RigolDP711()
-    
-    # Set voltage and enable output
-    psu.set_voltage(12.0)
-    psu.set_current(2.5)
-    psu.turn_on()
-    
-    # Measure
-    v = psu.measure_voltage()
-    i = psu.measure_current()
-    print(f"Voltage: {v:.3f}V, Current: {i:.3f}A")
-    
-    # Clean up
-    psu.turn_off()
-    psu.disconnect()
-    ```
+    """Rigol DP711 programmable power-supply driver.
+
+    Serial-backed driver with voltage/current control, output state commands,
+    and measurement helpers for bench automation.
     """
     
     def __init__(self, auto_connect: bool = True, com_port: Optional[str] = None, baud_rate: int = 9600):

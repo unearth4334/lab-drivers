@@ -277,14 +277,10 @@ _CACHE_FILE = os.path.join(_CACHE_DIR, "rsa3030_last_address.json")
 
 
 class RSA3030:
-    """
-    SCPI wrapper for Rigol RSA3030-TG Spectrum Analyzer.
+    """Rigol RSA3030 spectrum-analyzer driver.
 
-    Example:
-        rsa = RSA3030()                           # auto-detect
-        identity = rsa.get_identity()
-        print("Instrument:", identity)
-        rsa.disconnect()
+    VISA-backed SCPI driver for spectrum configuration, trace/spectrogram
+    capture, and instrument identity/query utilities.
     """
 
     # -----------------------------

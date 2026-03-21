@@ -344,34 +344,10 @@ _MIN_CONSECUTIVE_READINGS = 2  # Number of consecutive readings needed to confir
 
 
 class StanfordPS310:
-    """
-    Stanford Research Systems PS310 High Voltage Power Supply driver.
+    """Stanford PS310 high-voltage power-supply driver.
 
-    The PS310 provides precision high voltage DC power up to ±1250V with
-    excellent stability and low noise. Communication is via GPIB interface.
-
-    Note: This driver is configured for the PS310 negative model, which requires
-    negative voltage values (0V to -1250V).
-
-    Attributes:
-        status (str): Connection status ('Connected' or 'Not Connected')
-        address (str): VISA resource address when connected
-        instrument: PyVISA resource object
-        
-    Private Attributes (for glitch filtering):
-        _prev_voltage (float): Previous voltage reading, used for glitch detection
-        _consecutive_above_threshold (int): Counter for consecutive readings above threshold,
-            used to distinguish real voltage changes from transient glitches
-            
-    Note: Glitch filter uses _GLITCH_THRESHOLD (-40V) and _MIN_CONSECUTIVE_READINGS (2)
-          defined as module constants.
-
-    Example:
-        >>> hvps = StanfordPS310()  # Auto-connect
-        >>> hvps.set_voltage(-100.0)
-        >>> hvps.set_output_state(True)
-        >>> voltage = hvps.measure_voltage()
-        >>> hvps.disconnect()
+    VISA-backed driver for high-voltage set/read operations with optional glitch
+    filtering and debug logging controls.
     """
 
     def __init__(self, auto_connect: bool = True, address: Optional[str] = None):
