@@ -409,15 +409,31 @@ class KeysightMSOX4154A:
         except Exception: pass
 
     def save_screenshot(self, filename: str, inksaver: bool = False) -> bool:
-        """
-        Capture and save a screenshot to file.
-        
+        """Capture the oscilloscope screen and save it to a PNG file.
+
+        Sends a `:DISPlay:DATA?` query to retrieve the screen bitmap and writes
+        the result to *filename*. A console message is printed on success or
+        failure.
+
         Args:
-            filename: Output filename (should end with .png)
-            inksaver: Use ink-saver mode for printing
-            
+            filename: Destination file path. The file is written in binary mode;
+                use a `.png` extension for a valid PNG image.
+            inksaver: When ``True``, sets `:HARDcopy:INKSaver ON` before
+                capturing, which inverts the background for printing.
+
         Returns:
-            True if successful, False otherwise
+            ``True`` if the screenshot was written successfully, ``False`` if
+            any exception occurred (the exception is printed but not raised).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            ```python
+            scope = KeysightMSOX4154A()
+            scope.save_screenshot("capture.png")
+            scope.save_screenshot("capture_ink.png", inksaver=True)
+            ```
         """
         try:
             screenshot_data = self.get_screenshot(inksaver=inksaver)
@@ -431,6 +447,31 @@ class KeysightMSOX4154A:
 
     # ---------- Screenshot ----------
     def get_screenshot(self, inksaver: bool = False) -> bytes:
+        """Retrieve the oscilloscope screen capture as raw PNG bytes.
+
+        Issues `:DISPlay:DATA? PNG,…` and returns the binary payload. Use
+        `save_screenshot` if you only need to write the image to a file.
+
+        Args:
+            inksaver: When ``True``, sets `:HARDcopy:INKSaver ON` before
+                capturing, which inverts the background colour for printing.
+
+        Returns:
+            Raw PNG image data as a ``bytes`` object.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            RuntimeError: If the VISA query fails or the instrument returns an
+                error response.
+
+        Example:
+            ```python
+            scope = KeysightMSOX4154A()
+            png_bytes = scope.get_screenshot()
+            with open("screen.png", "wb") as f:
+                f.write(png_bytes)
+            ```
+        """
         self._chk()
         inst = self.instrument  # type: ignore
         try:
