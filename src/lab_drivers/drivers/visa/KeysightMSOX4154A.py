@@ -46,11 +46,15 @@ scope.disconnect()
 Explicit Connection
 -------------------
 ```python
-# Connect to specific VISA address
+# Connect by IP address (builds the TCPIP VISA string automatically)
+scope = KeysightMSOX4154A(ip="192.168.1.100")
+
+# Or pass the full VISA resource string
 scope = KeysightMSOX4154A(auto_connect=False)
 scope.connect("TCPIP0::192.168.1.100::inst0::INSTR")
 
 # Or use USB address
+scope = KeysightMSOX4154A(auto_connect=False)
 scope.connect("USB0::0x0957::0x17BC::MY59241237::INSTR")
 ```
 
@@ -311,7 +315,7 @@ class KeysightMSOX4154A:
     scope configuration helpers for test automation.
     """
 
-    def __init__(self, auto_connect: bool = True, timeout_ms: int = 20000, chunk_size: int = 102_400):
+    def __init__(self, auto_connect: bool = True, ip: Optional[str] = None, timeout_ms: int = 20000, chunk_size: int = 102_400):
         init(autoreset=True)
         self.rm: pyvisa.ResourceManager = pyvisa.ResourceManager()
         self.address: Optional[str] = None
@@ -319,48 +323,69 @@ class KeysightMSOX4154A:
         self.status: str = "Not Connected"
         self._timeout_ms = timeout_ms
         self._chunk_size = chunk_size
+        self._ip = ip
         if auto_connect:
             self._auto_connect()
 
     # ---------- Connect / Disconnect ----------
     def _auto_connect(self):
-        """Attempt to auto-detect and connect to Keysight MSOX4154A oscilloscope."""
+        """Attempt to auto-detect and connect to Keysight MSOX4154A oscilloscope.
+
+        Scans all USB resources matching the Keysight vendor ID (0x0957) and all
+        TCPIP INSTR resources known to the VISA resource manager, querying *IDN?
+        on each candidate and connecting to the first that identifies as an
+        MSOX4154A.
+        """
+        if self._ip:
+            self.connect(ip=self._ip)
+            return
         try:
             resources = self.rm.list_resources()
             for resource in resources:
-                if "0x0957" in resource and "INSTR" in resource:  # Keysight vendor ID
+                is_usb_keysight = "0x0957" in resource and "INSTR" in resource
+                is_tcpip = resource.upper().startswith("TCPIP") and "INSTR" in resource
+                if not (is_usb_keysight or is_tcpip):
+                    continue
+                inst = None
+                try:
+                    inst = self.rm.open_resource(resource)
+                    inst.timeout = self._timeout_ms
+                    idn = inst.query("*IDN?").strip()
+                    if "MSOX4154A" in idn or "MSO-X 4154A" in idn:
+                        inst.chunk_size = self._chunk_size
+                        inst.write_termination = '\n'
+                        inst.read_termination = None
+                        try:
+                            inst.write(":SYSTem:HEADer OFF")
+                        except Exception:
+                            pass
+                        self.instrument = inst
+                        self.address = resource
+                        self.status = "Connected"
+                        print(_SUCCESS_STYLE + f"Auto-connected to Keysight MSOX4154A at {resource}")
+                        return
+                    else:
+                        inst.close()
+                except Exception:
                     try:
-                        inst = self.rm.open_resource(resource)
-                        inst.timeout = self._timeout_ms
-                        idn = inst.query("*IDN?").strip()
-                        if "MSOX4154A" in idn or "MSO-X 4154A" in idn:
-                            inst.chunk_size = self._chunk_size
-                            inst.write_termination = '\n'
-                            inst.read_termination = None
-                            try:
-                                inst.write(":SYSTem:HEADer OFF")
-                            except Exception:
-                                pass
-                            self.instrument = inst
-                            self.address = resource
-                            self.status = "Connected"
-                            print(_SUCCESS_STYLE + f"Auto-connected to Keysight MSOX4154A at {resource}")
-                            return
-                        else:
+                        if inst is not None:
                             inst.close()
                     except Exception:
-                        try:
-                            inst.close()
-                        except:
-                            pass
-                        continue
+                        pass
+                    continue
             raise ConnectionError("No Keysight MSOX4154A oscilloscope found")
         except Exception as e:
             print(_ERROR_STYLE + f"Auto-connect failed: {e}")
             raise
 
-    def connect(self, address: Optional[str] = None):
-        """Connect to oscilloscope. If address provided, connect to specific address. Otherwise auto-detect."""
+    def connect(self, address: Optional[str] = None, ip: Optional[str] = None):
+        """Connect to oscilloscope.
+
+        Accepts a VISA resource string (``address``), a bare IP address (``ip``),
+        or neither — in which case USB resources are scanned automatically.
+        """
+        if ip and address is None:
+            address = f"TCPIP0::{ip}::inst0::INSTR"
         if address is not None:
             # Connect to specific address
             if "::INSTR" not in address:
