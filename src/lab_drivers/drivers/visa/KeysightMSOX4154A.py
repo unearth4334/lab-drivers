@@ -32,7 +32,8 @@ from libs.KeysightMSOX4154A import KeysightMSOX4154A
 scope = KeysightMSOX4154A()
 
 # Capture waveform from channel 1
-time_data, voltage_data, metadata = scope.get_waveform(source="CHAN1")
+wf = scope.get_waveform(channel=1)
+time_data, voltage_data, metadata = wf["t"], wf["y"], wf["meta"]
 
 print(f"Captured {len(time_data)} points")
 print(f"Time range: {time_data[0]:.9f} to {time_data[-1]:.9f} seconds")
@@ -56,17 +57,24 @@ scope.connect("USB0::0x0957::0x17BC::MY59241237::INSTR")
 Multi-Channel Waveform Capture
 -------------------------------
 ```python
-# Capture from multiple analog channels
-channels = ["CHAN1", "CHAN2", "CHAN3", "CHAN4"]
-waveforms = {}
+# Capture from multiple analog channels in a single batch (single trigger)
+wfs = scope.get_waveforms([1, 2, 3, 4], points=10_000)
+for ch, wf in wfs.items():
+    print(f"CHAN{ch}: {len(wf['y'])} samples, Fs={wf['meta']['sample_rate_hz']:.3g} Hz")
 
-for ch in channels:
-    t, y, meta = scope.get_waveform(source=ch)
-    waveforms[ch] = {"time": t, "voltage": y, "metadata": meta}
-    print(f"{ch}: {len(y)} samples, V_pp = {meta['vpp']:.3f} V")
+# Single-channel download with explicit format / options
+wf = scope.get_waveform(
+    channel=1,
+    points=50_000,
+    fmt="WORD",          # 16-bit binary for higher vertical resolution
+    include_time=True,
+    scaled=True,
+)
+t, y, meta = wf["t"], wf["y"], wf["meta"]
 
-# Capture digital channels
-t, digital_data, meta = scope.get_waveform(source="DIG0")
+# Non-analog sources (digital, MATH, FUNC) via explicit source string
+wf = scope.get_waveform(source="DIG0")
+t, digital_data, meta = wf["t"], wf["y"], wf["meta"]
 ```
 
 Screenshot Capture
@@ -131,22 +139,21 @@ for i in range(100):
 logger.close_file()
 ```
 
-Waveform Metadata
------------------
-The `get_waveform()` method returns metadata dict with:
-- `points`: Number of data points
-- `x_increment`: Time between samples (seconds)
-- `x_origin`: Time of first point (seconds)
-- `y_increment`: Voltage step per LSB
-- `y_origin`: Voltage at zero code
-- `y_reference`: Reference point code
-- `vpp`: Peak-to-peak voltage (if calculated)
-- `mean`: Average voltage (if calculated)
+Waveform Return Shape
+---------------------
+The `get_waveform()` method returns a dict with three keys:
+- `"t"`: list of time samples in seconds (or `None` if `include_time=False`)
+- `"y"`: list of voltage samples (or raw codes if `scaled=False`)
+- `"meta"`: dict containing the parsed preamble plus convenience fields:
+  - `xincr`, `xorig`, `xref`: time scaling
+  - `yincr`, `yorig`, `yref`: voltage scaling
+  - `points`, `count`, `format`, `type`: preamble metadata
+  - `source`, `channel`, `npoints`, `dt_s`, `sample_rate_hz`
+  - `t_start_s`, `t_stop_s`, `scaled`
 
 ```python
-t, y, meta = scope.get_waveform(source="CHAN1")
-sample_rate = 1.0 / meta['x_increment']
-print(f"Sample rate: {sample_rate/1e9:.3f} GS/s")
+wf = scope.get_waveform(channel=1)
+print(f"Sample rate: {wf['meta']['sample_rate_hz']/1e9:.3f} GS/s")
 ```
 
 Advanced Configuration
@@ -175,11 +182,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Capture waveform
-t, v, meta = scope.get_waveform(source="CHAN1")
+wf = scope.get_waveform(channel=1)
 
 # Convert to numpy arrays
-t = np.array(t)
-v = np.array(v)
+t = np.array(wf["t"])
+v = np.array(wf["y"])
 
 # Plot
 plt.figure(figsize=(12, 6))
@@ -200,7 +207,7 @@ except ConnectionError as e:
     print(f"Failed to connect: {e}")
 
 try:
-    t, v, meta = scope.get_waveform(source="CHAN1")
+    wf = scope.get_waveform(channel=1)
 except Exception as e:
     print(f"Waveform capture failed: {e}")
 ```
@@ -218,6 +225,7 @@ The following commands are supported by the `get(item, channel)` method:
 - **"xat_max"** or **"x_at_max"** - Time position of maximum voltage
 - **"full_screen_average"** or **"vaverage"** - Full screen voltage average
 - **"all_measurements"** - Returns complete statistics dictionary
+- **"waveform"** - Download a waveform dict ``{"t", "y", "meta"}`` for the channel
 
 Example:
 ```python
@@ -226,12 +234,19 @@ stats = scope.get("statistics", channel=1)  # [mean, std_dev, min, max, vpp]
 voltage = scope.get("voltage", channel=2)
 frequency = scope.get("frequency", channel=1)
 vpp = scope.get("voltage_pp", channel=3)
+wf = scope.get("waveform", channel=1)       # {"t": [...], "y": [...], "meta": {...}}
 ```
 
 Available Methods
 -----------------
 Waveform Methods:
-- `get_waveform(source)` - Capture waveform data (time, voltage, metadata)
+- `get_waveform(channel=..., *, source=..., points, points_mode, fmt,
+  include_time, scaled, stop_during_read, debug)` - Download a single
+  waveform; returns ``{"t", "y", "meta"}`` dict. Accepts integer
+  ``channel`` (1-4) or explicit ``source`` string for digital/MATH/FUNC
+  sources. Supports BYTE / WORD / ASCII transfer formats.
+- `get_waveforms(channels, ...)` - Batch multi-channel capture; stops
+  acquisition during read so all channels come from the same trigger.
 - `get_screenshot()` - Get screen capture as PNG bytes
 - `save_screenshot(filename)` - Save screen to file
 - `get(item, channel)` - Generic getter (supports commands listed above)
@@ -279,7 +294,7 @@ See Also
 
 
 from __future__ import annotations
-from typing import Optional, Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List
 
 import pyvisa
 from colorama import init, Fore, Style
@@ -517,65 +532,242 @@ class KeysightMSOX4154A:
         }
 
     def get_waveform(self,
-                     source: str = "CHAN1",
-                     points_mode: str = "RAW",
+                     channel: Optional[int] = None,
+                     *,
+                     source: Optional[str] = None,
                      points: Optional[int] = None,
-                     stop_during_read: bool = True,
-                     debug: bool = False
-                     ) -> Tuple[List[float], List[float], Dict[str, Any]]:
+                     points_mode: str = "RAW",
+                     fmt: str = "BYTE",
+                     include_time: bool = True,
+                     scaled: bool = True,
+                     stop_during_read: bool = False,
+                     debug: bool = False,
+                     ) -> Dict[str, Any]:
         """
-        Returns (t_seconds, volts, meta) using the scope's actual timebase.
-        - source: e.g., "CHAN1"
-        - points_mode: "RAW" (acquisition memory) or "NORMal"/"MAX" etc.
-        - points: optional decimation point count
-        - stop_during_read: stop acquisition to avoid buffer changing mid-read
+        Download a waveform from the oscilloscope and return it as a dict.
+
+        Accepts either an integer ``channel`` (1-4, for analog inputs) or an
+        explicit ``source`` string (e.g. ``"CHAN1"``, ``"DIG0"``, ``"MATH"``,
+        ``"FUNC1"``). Exactly one of the two must be provided. Supports
+        ``BYTE`` / ``WORD`` / ``ASCII`` transfer formats and lets callers opt
+        out of time-axis generation or scaling for raw-acquisition workflows.
+
+        Args:
+            channel: Analog channel index (1, 2, 3, or 4). Mutually exclusive
+                with ``source``. Defaults to channel 1 if neither is given.
+            source: Explicit waveform source string. Use for non-analog
+                sources such as ``"DIG0"``-``"DIG15"``, ``"MATH"``, ``"FFT"``,
+                or ``"FUNC1"``/``"FUNC2"``.
+            points: Optional decimation point count. If ``None``, the
+                instrument's currently configured point count is used.
+            points_mode: ``:WAVeform:POINts:MODE`` selection. Typical values
+                are ``"RAW"`` (acquisition memory), ``"NORMal"``, or
+                ``"MAXimum"``.
+            fmt: Waveform transfer format. One of ``"BYTE"`` (8-bit binary,
+                default and fastest), ``"WORD"`` (16-bit binary), or
+                ``"ASCII"`` (comma-separated scaled floats).
+            include_time: When ``True``, generate and return a time axis
+                computed from the preamble. When ``False``, ``"t"`` is
+                ``None`` (skip generation for large captures).
+            scaled: When ``True`` (binary formats only), convert raw codes to
+                volts using the preamble. When ``False``, return raw integer
+                codes. Ignored for ASCII format (already scaled).
+            stop_during_read: When ``True``, issue ``:STOP`` before reading
+                and restore the prior run state after, so the buffer cannot
+                change mid-transfer.
+            debug: When ``True``, print a one-line summary of the transfer.
+
+        Returns:
+            Dictionary with keys:
+
+            - ``"t"``: ``list[float]`` time samples in seconds, or ``None``
+              when ``include_time=False``.
+            - ``"y"``: ``list[float]`` voltage samples (or raw codes if
+              ``scaled=False`` with a binary format).
+            - ``"meta"``: ``dict`` containing the parsed preamble (``xincr``,
+              ``xorig``, ``xref``, ``yincr``, ``yorig``, ``yref``, ``points``,
+              ``count``, ``format``, ``type``) plus ``source``, ``channel``,
+              ``npoints``, ``dt_s``, ``sample_rate_hz``, ``t_start_s``,
+              ``t_stop_s``, and the resolved ``scaled`` / ``format`` settings.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If both ``channel`` and ``source`` are given, if
+                ``channel`` is not in 1-4, or if ``fmt`` is unknown.
+            RuntimeError: If the instrument returns an unparseable preamble
+                or the VISA transfer fails.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> wf = scope.get_waveform(1, points=10_000)
+            >>> len(wf["y"]), wf["meta"]["sample_rate_hz"]
+            (10000, 5e9)
+            >>> wf = scope.get_waveform(source="DIG0", include_time=False)
+            >>> wf["t"] is None
+            True
+            >>> raw = scope.get_waveform(2, fmt="WORD", scaled=False)
+            >>> isinstance(raw["y"][0], int)
+            True
         """
         self._chk()
+
+        # Resolve source
+        if channel is not None and source is not None:
+            raise ValueError(_ERROR_STYLE + "pass either channel or source, not both")
+        if source is None:
+            ch = 1 if channel is None else channel
+            if not isinstance(ch, int) or not (1 <= ch <= 4):
+                raise ValueError(_ERROR_STYLE + f"channel must be int 1-4, got {channel!r}")
+            resolved_source = f"CHAN{ch}"
+            resolved_channel: Optional[int] = ch
+        else:
+            resolved_source = source
+            resolved_channel = None
+
+        fmt_upper = fmt.upper()
+        if fmt_upper == "ASC":
+            fmt_upper = "ASCII"
+        if fmt_upper not in ("BYTE", "WORD", "ASCII"):
+            raise ValueError(_ERROR_STYLE + f"fmt must be BYTE, WORD, or ASCII; got {fmt!r}")
+
         inst = self.instrument  # type: ignore
 
+        was_running = self.is_running() if stop_during_read else False
+        try:
+            if stop_during_read and was_running:
+                self.stop()
 
-        # Configure waveform transfer
-        inst.write(f":WAVeform:SOURce {source}")
-        inst.write(":WAVeform:FORMat BYTE")
-        inst.write(":WAVeform:BYTeorder LSBFirst")
-        inst.write(f":WAVeform:POINts:MODE {points_mode}")
-        if points is not None:
-            inst.write(f":WAVeform:POINts {int(points)}")
+            # Configure transfer
+            inst.write(f":WAVeform:SOURce {resolved_source}")
+            inst.write(f":WAVeform:FORMat {fmt_upper}")
+            if fmt_upper in ("BYTE", "WORD"):
+                inst.write(":WAVeform:BYTeorder LSBFirst")
+            inst.write(f":WAVeform:POINts:MODE {points_mode}")
+            if points is not None:
+                inst.write(f":WAVeform:POINts {int(points)}")
 
-        # Read scaling (preamble)
-        meta = self._read_preamble()
-        xincr = meta["xincr"]
-        xorig = meta["xorig"]
-        yincr = meta["yincr"]
-        yorig = meta["yorig"]
-        yref  = meta["yref"]
-        sample_rate = 1.0 / xincr if xincr > 0 else float("nan")
-        meta["sample_rate_hz"] = sample_rate
+            # Preamble (also used for time axis even with ASCII)
+            meta = self._read_preamble()
 
-        # Fetch binary data (unsigned bytes 0..255)
-        raw: List[int] = inst.query_binary_values(":WAVeform:DATA?",
-                                                  datatype='B',
-                                                  is_big_endian=False,
-                                                  container=list,
-                                                  chunk_size=self._chunk_size)
+            # Fetch data
+            if fmt_upper == "BYTE":
+                raw = inst.query_binary_values(":WAVeform:DATA?",
+                                               datatype='B',
+                                               is_big_endian=False,
+                                               container=list,
+                                               chunk_size=self._chunk_size)
+            elif fmt_upper == "WORD":
+                raw = inst.query_binary_values(":WAVeform:DATA?",
+                                               datatype='H',
+                                               is_big_endian=False,
+                                               container=list,
+                                               chunk_size=self._chunk_size)
+            else:  # ASCII
+                resp = inst.query(":WAVeform:DATA?").strip()
+                raw = [float(v) for v in resp.split(",") if v.strip()]
+        finally:
+            if stop_during_read and was_running:
+                self.run()
 
         n = len(raw)
+
+        # Scale (binary only; ASCII is already in volts)
+        if fmt_upper in ("BYTE", "WORD") and scaled:
+            yref = meta["yref"]; yincr = meta["yincr"]; yorig = meta["yorig"]
+            y: List[float] = [(v - yref) * yincr + yorig for v in raw]
+        else:
+            y = list(raw)
+
+        xincr = meta["xincr"]; xorig = meta["xorig"]
+        sample_rate = (1.0 / xincr) if xincr > 0 else float("nan")
+        if include_time:
+            t: Optional[List[float]] = [xorig + i * xincr for i in range(n)]
+            t_start = t[0] if n else None
+            t_stop = t[-1] if n else None
+        else:
+            t = None
+            t_start = xorig if n else None
+            t_stop = xorig + (n - 1) * xincr if n else None
+
         if debug:
-            print(f"[{source}] points={n}, xincr={xincr} s, Fs={sample_rate} Hz")
+            print(f"[{resolved_source}] points={n}, xincr={xincr} s, Fs={sample_rate} Hz")
 
-        # Convert to time and volts
-        t = [xorig + i * xincr for i in range(n)]
-        y = [(v - yref) * yincr + yorig for v in raw]
-
-        # Add a few more helpful fields
         meta.update({
-            "source": source,
+            "source": resolved_source,
+            "channel": resolved_channel,
+            "format": fmt_upper,
+            "scaled": bool(scaled) if fmt_upper in ("BYTE", "WORD") else True,
             "npoints": n,
             "dt_s": xincr,
-            "t_start_s": t[0] if n else None,
-            "t_stop_s": t[-1] if n else None,
+            "sample_rate_hz": sample_rate,
+            "t_start_s": t_start,
+            "t_stop_s": t_stop,
         })
-        return t, y, meta
+        return {"t": t, "y": y, "meta": meta}
+
+    def get_waveforms(self,
+                      channels: List[int],
+                      *,
+                      points: Optional[int] = None,
+                      points_mode: str = "RAW",
+                      fmt: str = "BYTE",
+                      include_time: bool = True,
+                      scaled: bool = True,
+                      stop_during_read: bool = True,
+                      ) -> Dict[int, Dict[str, Any]]:
+        """
+        Download waveforms from multiple analog channels in a single batch.
+
+        Stops the acquisition (when ``stop_during_read=True`` and the scope is
+        currently running) so that all returned channels are captured from the
+        same trigger event, then restores the prior run state.
+
+        Args:
+            channels: Iterable of analog channel indices (each in 1-4).
+            points: Forwarded to :meth:`get_waveform`.
+            points_mode: Forwarded to :meth:`get_waveform`.
+            fmt: Forwarded to :meth:`get_waveform`.
+            include_time: Forwarded to :meth:`get_waveform`.
+            scaled: Forwarded to :meth:`get_waveform`.
+            stop_during_read: When ``True``, issue ``:STOP`` before reading and
+                ``:RUN`` after, so the buffer cannot change mid-transfer.
+
+        Returns:
+            Dictionary keyed by channel index, mapping each to the dict
+            returned by :meth:`get_waveform`.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If any channel is not in 1-4 or ``fmt`` is unknown.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> wfs = scope.get_waveforms([1, 2], points=5000)
+            >>> sorted(wfs.keys())
+            [1, 2]
+            >>> wfs[1]["meta"]["sample_rate_hz"] == wfs[2]["meta"]["sample_rate_hz"]
+            True
+        """
+        self._chk()
+        was_running = self.is_running() if stop_during_read else False
+        try:
+            if stop_during_read and was_running:
+                self.stop()
+            return {
+                int(ch): self.get_waveform(
+                    int(ch),
+                    points=points,
+                    points_mode=points_mode,
+                    fmt=fmt,
+                    include_time=include_time,
+                    scaled=scaled,
+                    stop_during_read=False,
+                )
+                for ch in channels
+            }
+        finally:
+            if stop_during_read and was_running:
+                self.run()
 
     # ---------- Measurement Statistics ----------
     def setup_measurements(self, channel: str = "CHAN1"):
@@ -979,8 +1171,9 @@ class KeysightMSOX4154A:
         
         try:
             # Get waveform data for statistical analysis
-            t, y, meta = self.get_waveform(source=channel, debug=False)
-            
+            wf = self.get_waveform(source=channel, debug=False)
+            t, y, meta = wf["t"], wf["y"], wf["meta"]
+
             if not y:
                 return {"error": "No waveform data available"}
                 
@@ -1072,7 +1265,10 @@ class KeysightMSOX4154A:
                 
             elif item.lower() == "all_measurements":
                 return self.get_statistics(channel_str)
-                
+
+            elif item.lower() == "waveform":
+                return self.get_waveform(int(channel))
+
             else:
                 # Try to get the measurement directly
                 return self.get_measurement(item.upper(), channel_str)
