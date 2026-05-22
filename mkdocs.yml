@@ -50,6 +50,7 @@ nav:
       - RigolDS7034: api/drivers/rigolds7034.md
       - RSA3030: api/drivers/rsa3030.md
       - StanfordPS310: api/drivers/stanfordps310.md
+      - TektronixMSO4: api/drivers/tektronixmso4.md
       - U1233A: api/drivers/u1233a.md
 
 # Plugins
