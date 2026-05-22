@@ -33,7 +33,7 @@ theme:
 # Navigation structure
 nav:
   - Home: index.md
-  - Install Instructions: install.md
+  - Install Instructions: install-instructions.md
   - API Reference:
     - api/index.md
     - Drivers:

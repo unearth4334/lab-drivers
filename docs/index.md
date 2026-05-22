@@ -4,7 +4,7 @@ This site is a concise API reference for bench drivers.
 
 ## Fast path
 
-1. Install dependencies from [Installation](install.md).
+1. Install dependencies from [Install Instructions](install-instructions.md).
 2. Open [API Reference](api/index.md).
 3. Pick a driver and use the generated class/method docs.
 
