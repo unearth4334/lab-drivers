@@ -448,6 +448,279 @@ class KeysightMSOX4154A:
             print(_SUCCESS_STYLE + "Oscilloscope acquisition started")
         except Exception: pass
 
+    # ---------- Configuration / Metadata ----------
+    def _q(self, scpi: str) -> Optional[str]:
+        """Query a SCPI command and return the stripped string, or ``None`` on error."""
+        self._chk()
+        try:
+            return self.instrument.query(scpi).strip()  # type: ignore
+        except Exception:
+            return None
+
+    def _qf(self, scpi: str) -> Optional[float]:
+        """Query a SCPI command and return a ``float``, or ``None`` on error."""
+        s = self._q(scpi)
+        if s is None:
+            return None
+        try:
+            return float(s)
+        except (TypeError, ValueError):
+            return None
+
+    def _qbool(self, scpi: str) -> Optional[bool]:
+        """Query a SCPI command and return a ``bool`` (``"1"``/``"ON"`` → True), or ``None`` on error."""
+        s = self._q(scpi)
+        if s is None:
+            return None
+        s = s.upper()
+        if s in ("1", "ON", "TRUE"):
+            return True
+        if s in ("0", "OFF", "FALSE"):
+            return False
+        try:
+            return bool(int(float(s)))
+        except (TypeError, ValueError):
+            return None
+
+    def get_channel_config(self, channel: int) -> Dict[str, Any]:
+        """
+        Return the full configuration of a single analog channel.
+
+        Issues a sequence of ``:CHANnel<N>:…?`` queries and packs the results
+        into a typed dictionary suitable for recording alongside a waveform or
+        screenshot. Any individual query that the instrument rejects is
+        reported as ``None`` rather than raising.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+
+        Returns:
+            Dictionary with the following keys (values may be ``None`` if the
+            instrument does not support a particular query):
+
+            - ``"channel"``: ``int`` — the queried channel number.
+            - ``"source"``: ``str`` — canonical source name (``"CHAN1"`` etc.).
+            - ``"display"``: ``bool`` — whether the trace is on.
+            - ``"coupling"``: ``str`` — ``"AC"`` or ``"DC"``.
+            - ``"impedance"``: ``str`` — ``"ONEM"`` (1 MΩ) or ``"FIFT"`` (50 Ω).
+            - ``"bw_limit"``: ``bool`` — 25 MHz bandwidth limit on/off.
+            - ``"invert"``: ``bool`` — trace inversion on/off.
+            - ``"vernier"``: ``bool`` — fine vertical scaling on/off.
+            - ``"scale_v_per_div"``: ``float`` — vertical scale, V/div.
+            - ``"offset_v"``: ``float`` — vertical offset, volts.
+            - ``"range_v"``: ``float`` — full-screen vertical range, volts.
+            - ``"probe_attenuation"``: ``float`` — probe ratio (e.g. ``10.0``).
+            - ``"probe_skew_s"``: ``float`` — per-channel skew, seconds.
+            - ``"units"``: ``str`` — ``"VOLT"`` or ``"AMP"``.
+            - ``"label"``: ``str`` — user-assigned channel label.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> cfg = scope.get_channel_config(1)
+            >>> cfg["scale_v_per_div"], cfg["coupling"]
+            (0.5, 'DC')
+        """
+        if not isinstance(channel, int) or not (1 <= channel <= 4):
+            raise ValueError(_ERROR_STYLE + f"channel must be int 1-4, got {channel!r}")
+        n = channel
+        label = self._q(f":CHANnel{n}:LABel?")
+        if label is not None:
+            label = label.strip().strip('"')
+        return {
+            "channel":            n,
+            "source":             f"CHAN{n}",
+            "display":            self._qbool(f":CHANnel{n}:DISPlay?"),
+            "coupling":           self._q(f":CHANnel{n}:COUPling?"),
+            "impedance":          self._q(f":CHANnel{n}:IMPedance?"),
+            "bw_limit":           self._qbool(f":CHANnel{n}:BWLimit?"),
+            "invert":             self._qbool(f":CHANnel{n}:INVert?"),
+            "vernier":            self._qbool(f":CHANnel{n}:VERNier?"),
+            "scale_v_per_div":    self._qf(f":CHANnel{n}:SCALe?"),
+            "offset_v":           self._qf(f":CHANnel{n}:OFFSet?"),
+            "range_v":            self._qf(f":CHANnel{n}:RANGe?"),
+            "probe_attenuation":  self._qf(f":CHANnel{n}:PROBe?"),
+            "probe_skew_s":       self._qf(f":CHANnel{n}:PROBe:SKEW?"),
+            "units":              self._q(f":CHANnel{n}:UNITs?"),
+            "label":              label,
+        }
+
+    def get_timebase_config(self) -> Dict[str, Any]:
+        """
+        Return the current horizontal (timebase) configuration.
+
+        Returns:
+            Dictionary with keys (values may be ``None`` on unsupported queries):
+
+            - ``"scale_s_per_div"``: ``float`` — horizontal scale, s/div.
+            - ``"position_s"``: ``float`` — horizontal position, seconds.
+            - ``"range_s"``: ``float`` — full-screen time span (10 × scale).
+            - ``"reference"``: ``str`` — ``"LEFT"``, ``"CENT"`` or ``"RIGH"``.
+            - ``"mode"``: ``str`` — ``"MAIN"``, ``"WIND"``, ``"XY"``, ``"ROLL"``.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.get_timebase_config()["scale_s_per_div"]
+            1e-06
+        """
+        return {
+            "scale_s_per_div": self._qf(":TIMebase:SCALe?"),
+            "position_s":      self._qf(":TIMebase:POSition?"),
+            "range_s":         self._qf(":TIMebase:RANGe?"),
+            "reference":       self._q(":TIMebase:REFerence?"),
+            "mode":            self._q(":TIMebase:MODE?"),
+        }
+
+    def get_trigger_config(self) -> Dict[str, Any]:
+        """
+        Return the current trigger configuration.
+
+        Covers the common Edge-trigger fields (the default and most-used
+        trigger mode on the MSOX4154A). For non-edge modes, ``mode`` will
+        reflect the actual setting and the edge-specific fields fall back to
+        ``None`` when the instrument rejects them.
+
+        Returns:
+            Dictionary with keys (values may be ``None`` on unsupported queries):
+
+            - ``"mode"``: ``str`` — ``"EDGE"``, ``"GLIT"``, ``"PATT"``, etc.
+            - ``"sweep"``: ``str`` — ``"AUTO"`` or ``"NORM"``.
+            - ``"holdoff_s"``: ``float`` — trigger holdoff, seconds.
+            - ``"level_v"``: ``float`` — current trigger level, volts.
+            - ``"source"``: ``str`` — edge-trigger source (e.g. ``"CHAN1"``).
+            - ``"slope"``: ``str`` — ``"POS"``, ``"NEG"``, ``"EITH"``, ``"ALT"``.
+            - ``"coupling"``: ``str`` — edge-trigger coupling.
+            - ``"reject"``: ``str`` — high/low-frequency reject (``"OFF"``/``"LF"``/``"HF"``).
+            - ``"noise_reject"``: ``bool`` — noise-reject enable.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> trig = scope.get_trigger_config()
+            >>> trig["mode"], trig["source"], trig["level_v"]
+            ('EDGE', 'CHAN1', 1.5)
+        """
+        return {
+            "mode":         self._q(":TRIGger:MODE?"),
+            "sweep":        self._q(":TRIGger:SWEep?"),
+            "holdoff_s":    self._qf(":TRIGger:HOLDoff?"),
+            "level_v":      self._qf(":TRIGger:LEVel?"),
+            "source":       self._q(":TRIGger:EDGE:SOURce?"),
+            "slope":        self._q(":TRIGger:EDGE:SLOPe?"),
+            "coupling":     self._q(":TRIGger:EDGE:COUPling?"),
+            "reject":       self._q(":TRIGger:EDGE:REJect?"),
+            "noise_reject": self._qbool(":TRIGger:NREJect?"),
+        }
+
+    def get_acquisition_config(self) -> Dict[str, Any]:
+        """
+        Return the current acquisition configuration.
+
+        Returns:
+            Dictionary with keys (values may be ``None`` on unsupported queries):
+
+            - ``"type"``: ``str`` — ``"NORM"``, ``"AVER"``, ``"HRES"``, ``"PEAK"``.
+            - ``"mode"``: ``str`` — ``"RTIM"`` (real time) or ``"SEGM"``.
+            - ``"sample_rate_hz"``: ``float`` — current acquisition sample rate.
+            - ``"points"``: ``int`` — record length.
+            - ``"count"``: ``int`` — averaging count (relevant for type=AVER).
+            - ``"complete_pct"``: ``float`` — acquisition-complete threshold.
+            - ``"running"``: ``bool`` — whether acquisition is currently armed.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> acq = scope.get_acquisition_config()
+            >>> acq["type"], acq["sample_rate_hz"]
+            ('NORM', 5e9)
+        """
+        pts = self._qf(":ACQuire:POINts?")
+        cnt = self._qf(":ACQuire:COUNt?")
+        return {
+            "type":           self._q(":ACQuire:TYPE?"),
+            "mode":           self._q(":ACQuire:MODE?"),
+            "sample_rate_hz": self._qf(":ACQuire:SRATe?"),
+            "points":         int(pts) if pts is not None else None,
+            "count":          int(cnt) if cnt is not None else None,
+            "complete_pct":   self._qf(":ACQuire:COMPlete?"),
+            "running":        self._qbool(":ACQuire:STATE?"),
+        }
+
+    def get_metadata(self, channels: Optional[List[int]] = None) -> Dict[str, Any]:
+        """
+        Return a comprehensive snapshot of instrument state for archival.
+
+        Aggregates the per-channel, timebase, trigger, and acquisition
+        configurations into a single dictionary intended to be saved alongside
+        a captured waveform or screenshot for later analysis. Also includes
+        the instrument ``*IDN?`` string, the VISA address, and a UTC ISO-8601
+        timestamp.
+
+        Args:
+            channels: List of analog channels to include (each in 1-4). When
+                ``None`` (default), only channels whose ``:CHANnel<N>:DISPlay?``
+                query returns true are included. Pass ``[1, 2, 3, 4]`` to
+                snapshot every analog input unconditionally.
+
+        Returns:
+            Dictionary with the following structure::
+
+                {
+                    "idn": str,                 # *IDN? response
+                    "address": str | None,      # VISA resource string
+                    "timestamp_iso": str,       # UTC ISO-8601, e.g. "2026-05-22T18:42:01Z"
+                    "timebase":    {...},       # see get_timebase_config()
+                    "trigger":     {...},       # see get_trigger_config()
+                    "acquisition": {...},       # see get_acquisition_config()
+                    "channels":    {1: {...}, 2: {...}},  # see get_channel_config()
+                }
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> meta = scope.get_metadata()
+            >>> sorted(meta.keys())
+            ['acquisition', 'address', 'channels', 'idn', 'timebase', 'timestamp_iso', 'trigger']
+            >>> meta = scope.get_metadata(channels=[1, 2])
+            >>> sorted(meta["channels"].keys())
+            [1, 2]
+        """
+        self._chk()
+        from datetime import datetime, timezone
+
+        if channels is None:
+            wanted: List[int] = []
+            for n in range(1, 5):
+                if self._qbool(f":CHANnel{n}:DISPlay?"):
+                    wanted.append(n)
+        else:
+            wanted = [int(c) for c in channels]
+            for n in wanted:
+                if not (1 <= n <= 4):
+                    raise ValueError(_ERROR_STYLE + f"channel must be int 1-4, got {n!r}")
+
+        return {
+            "idn":           self.get_idn(),
+            "address":       self.address,
+            "timestamp_iso": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timebase":      self.get_timebase_config(),
+            "trigger":       self.get_trigger_config(),
+            "acquisition":   self.get_acquisition_config(),
+            "channels":      {n: self.get_channel_config(n) for n in wanted},
+        }
+
     def save_screenshot(self, filename: str, inksaver: bool = False) -> bool:
         """Capture the oscilloscope screen and save it to a PNG file.
 
@@ -565,6 +838,7 @@ class KeysightMSOX4154A:
                      fmt: str = "BYTE",
                      include_time: bool = True,
                      scaled: bool = True,
+                     include_config: bool = False,
                      stop_during_read: bool = False,
                      debug: bool = False,
                      ) -> Dict[str, Any]:
@@ -597,6 +871,11 @@ class KeysightMSOX4154A:
             scaled: When ``True`` (binary formats only), convert raw codes to
                 volts using the preamble. When ``False``, return raw integer
                 codes. Ignored for ASCII format (already scaled).
+            include_config: When ``True``, attach instrument-state metadata to
+                the returned ``meta`` dict: ``meta["channel_config"]`` holds
+                the result of :meth:`get_channel_config` for the resolved
+                analog channel (omitted for non-analog sources), and
+                ``meta["system"]`` holds ``{"timebase", "trigger", "acquisition"}``.
             stop_during_read: When ``True``, issue ``:STOP`` before reading
                 and restore the prior run state after, so the buffer cannot
                 change mid-transfer.
@@ -728,6 +1007,14 @@ class KeysightMSOX4154A:
             "t_start_s": t_start,
             "t_stop_s": t_stop,
         })
+        if include_config:
+            if resolved_channel is not None:
+                meta["channel_config"] = self.get_channel_config(resolved_channel)
+            meta["system"] = {
+                "timebase":    self.get_timebase_config(),
+                "trigger":     self.get_trigger_config(),
+                "acquisition": self.get_acquisition_config(),
+            }
         return {"t": t, "y": y, "meta": meta}
 
     def get_waveforms(self,
@@ -738,6 +1025,7 @@ class KeysightMSOX4154A:
                       fmt: str = "BYTE",
                       include_time: bool = True,
                       scaled: bool = True,
+                      include_config: bool = False,
                       stop_during_read: bool = True,
                       ) -> Dict[int, Dict[str, Any]]:
         """
@@ -786,6 +1074,7 @@ class KeysightMSOX4154A:
                     fmt=fmt,
                     include_time=include_time,
                     scaled=scaled,
+                    include_config=include_config,
                     stop_during_read=False,
                 )
                 for ch in channels
@@ -1293,6 +1582,21 @@ class KeysightMSOX4154A:
 
             elif item.lower() == "waveform":
                 return self.get_waveform(int(channel))
+
+            elif item.lower() == "metadata":
+                return self.get_metadata([int(channel)])
+
+            elif item.lower() in ("channel_config", "channel_cfg"):
+                return self.get_channel_config(int(channel))
+
+            elif item.lower() == "timebase":
+                return self.get_timebase_config()
+
+            elif item.lower() == "trigger":
+                return self.get_trigger_config()
+
+            elif item.lower() == "acquisition":
+                return self.get_acquisition_config()
 
             else:
                 # Try to get the measurement directly
