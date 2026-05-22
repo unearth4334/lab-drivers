@@ -1,0 +1,34 @@
+name: Update install tag in docs
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update version tag in docs
+        run: |
+          TAG=${{ github.ref_name }}
+          sed -i "s|@v[0-9]*\.[0-9]*\.[0-9]*|@${TAG}|g" docs/install-instructions.md README.md
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet && echo "No changes to commit" || (
+            git add docs/install-instructions.md README.md &&
+            git commit -m "docs: update install tag to ${{ github.ref_name }}" &&
+            git push
+          )
