@@ -11,4 +11,5 @@ __all__ = [
 	"RigolDP832",
 	"RigolDS7034",
 	"StanfordPS310",
+	"TektronixMSO4",
 ]
