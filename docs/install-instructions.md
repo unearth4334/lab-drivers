@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.9+
-- Optional: VISA runtime for VISA-connected instruments
+- VISA runtime for VISA-connected instruments
 
 ## Install from GitHub
 
@@ -11,22 +11,7 @@ The simplest way to install `lab-drivers` into any project environment is direct
 
 Replace `v0.1.0` with the [latest tagged release](https://github.com/unearth4334/lab-drivers/releases) if a newer version is available.
 
-**Latest release (recommended):**
-
 ```bash
-pip install "lab-drivers[visa] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0"
-```
-
-**Specific extras:**
-
-```bash
-# VISA instruments only
-pip install "lab-drivers[visa] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0"
-
-# Serial instruments only
-pip install "lab-drivers[serial] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0"
-
-# All extras
 pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0"
 ```
 
@@ -37,14 +22,14 @@ pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.g
 ```toml
 [project]
 dependencies = [
-  "lab-drivers[visa] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0",
+  "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0",
 ]
 ```
 
 **`requirements.txt`:**
 
 ```text
-lab-drivers[visa] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0
+lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0
 ```
 
 Then install normally:

@@ -13,14 +13,10 @@ This repository intentionally excludes orchestration/UI concerns (for example pr
 ## Install
 
 ```bash
-pip install -e .
+pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.1.0"
 ```
 
-Recommended extras:
-
-```bash
-pip install -e ".[visa,serial]"
-```
+See [Install Instructions](https://unearth4334.github.io/lab-drivers/install-instructions/) for full details including `pyproject.toml` and `requirements.txt` usage.
 
 ## Package layout
 
