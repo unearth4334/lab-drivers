@@ -19,6 +19,7 @@ This section is intentionally minimal and generated from source docstrings.
 | RigolDS7034 | `lab_drivers.drivers.visa.RigolDS7034.RigolDS7034` | [RigolDS7034](drivers/rigolds7034.md) |
 | RSA3030 | `lab_drivers.drivers.visa.RSA3030.RSA3030` | [RSA3030](drivers/rsa3030.md) |
 | StanfordPS310 | `lab_drivers.drivers.visa.StanfordPS310.StanfordPS310` | [StanfordPS310](drivers/stanfordps310.md) |
+| TektronixMSO4 | `lab_drivers.drivers.visa.TektronixMSO4.TektronixMSO4` | [TektronixMSO4](drivers/tektronixmso4.md) |
 | U1233A | `lab_drivers.drivers.serial.U1233A.U1233A` | [U1233A](drivers/u1233a.md) |
 
 ## Quick usage
