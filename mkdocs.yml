@@ -47,6 +47,7 @@ nav:
       - KeysightMSOX4154A: api/drivers/keysightmsox4154a.md
       - RigolDP711: api/drivers/rigoldp711.md
       - RigolDP832: api/drivers/rigoldp832.md
+      - RigolDS1054Z: api/drivers/rigolds1054z.md
       - RigolDS7034: api/drivers/rigolds7034.md
       - RSA3030: api/drivers/rsa3030.md
       - StanfordPS310: api/drivers/stanfordps310.md

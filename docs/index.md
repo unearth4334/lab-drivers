@@ -1,6 +1,6 @@
 # Lab Drivers Reference
 
-`v0.2.0` — Reusable Python drivers for VISA and serial lab instruments.
+`v0.2.2` — Reusable Python drivers for VISA and serial lab instruments.
 
 ## Fast path
 
@@ -22,6 +22,7 @@
 | [KS33500B](api/drivers/ks33500b.md) | VISA | Waveform generator |
 | [RigolDP711](api/drivers/rigoldp711.md) | Serial | DC power supply |
 | [RigolDP832](api/drivers/rigoldp832.md) | VISA | DC power supply |
+| [RigolDS1054Z](api/drivers/rigolds1054z.md) | VISA | Digital oscilloscope |
 | [RigolDS7034](api/drivers/rigolds7034.md) | VISA | Digital oscilloscope |
 | [RSA3030](api/drivers/rsa3030.md) | VISA | Spectrum analyser |
 | [StanfordPS310](api/drivers/stanfordps310.md) | VISA | HV power supply |

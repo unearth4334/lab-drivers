@@ -16,6 +16,7 @@ This section is intentionally minimal and generated from source docstrings.
 | KeysightMSOX4154A | `lab_drivers.drivers.visa.KeysightMSOX4154A.KeysightMSOX4154A` | [KeysightMSOX4154A](drivers/keysightmsox4154a.md) |
 | RigolDP711 | `lab_drivers.drivers.serial.RigolDP711.RigolDP711` | [RigolDP711](drivers/rigoldp711.md) |
 | RigolDP832 | `lab_drivers.drivers.visa.RigolDP832.RigolDP832` | [RigolDP832](drivers/rigoldp832.md) |
+| RigolDS1054Z | `lab_drivers.drivers.visa.RigolDS1054Z.RigolDS1054Z` | [RigolDS1054Z](drivers/rigolds1054z.md) |
 | RigolDS7034 | `lab_drivers.drivers.visa.RigolDS7034.RigolDS7034` | [RigolDS7034](drivers/rigolds7034.md) |
 | RSA3030 | `lab_drivers.drivers.visa.RSA3030.RSA3030` | [RSA3030](drivers/rsa3030.md) |
 | StanfordPS310 | `lab_drivers.drivers.visa.StanfordPS310.StanfordPS310` | [StanfordPS310](drivers/stanfordps310.md) |
