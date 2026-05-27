@@ -9,6 +9,7 @@ __all__ = [
 	"KeysightMSOX4154A",
 	"RSA3030",
 	"RigolDP832",
+	"RigolDS1054Z",
 	"RigolDS7034",
 	"StanfordPS310",
 	"TektronixMSO4",
