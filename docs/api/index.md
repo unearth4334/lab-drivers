@@ -12,6 +12,7 @@ This section is intentionally minimal and generated from source docstrings.
 | FLUKE45 | `lab_drivers.drivers.serial.FLUKE45.FLUKE45` | [FLUKE45](drivers/fluke45.md) |
 | KA3010P | `lab_drivers.drivers.serial.KA3010P.KA3010P` | [KA3010P](drivers/ka3010p.md) |
 | KS33500B | `lab_drivers.drivers.visa.KS33500B.KS33500B` | [KS33500B](drivers/ks33500b.md) |
+| KeysightEL34143A | `lab_drivers.drivers.visa.KeysightEL34143A.KeysightEL34143A` | [KeysightEL34143A](drivers/keysightel34143a.md) |
 | Keysight34460A | `lab_drivers.drivers.visa.Keysight34460A.Keysight34460A` | [Keysight34460A](drivers/keysight34460a.md) |
 | KeysightMSOX4154A | `lab_drivers.drivers.visa.KeysightMSOX4154A.KeysightMSOX4154A` | [KeysightMSOX4154A](drivers/keysightmsox4154a.md) |
 | RigolDP711 | `lab_drivers.drivers.serial.RigolDP711.RigolDP711` | [RigolDP711](drivers/rigoldp711.md) |

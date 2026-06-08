@@ -43,6 +43,7 @@ nav:
       - FLUKE45: api/drivers/fluke45.md
       - KA3010P: api/drivers/ka3010p.md
       - KS33500B: api/drivers/ks33500b.md
+      - KeysightEL34143A: api/drivers/keysightel34143a.md
       - Keysight34460A: api/drivers/keysight34460a.md
       - KeysightMSOX4154A: api/drivers/keysightmsox4154a.md
       - RigolDP711: api/drivers/rigoldp711.md

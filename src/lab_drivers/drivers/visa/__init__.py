@@ -5,6 +5,7 @@ __all__ = [
 	"DMM6500",
 	"DP832",
 	"KS33500B",
+	"KeysightEL34143A",
 	"Keysight34460A",
 	"KeysightMSOX4154A",
 	"RSA3030",
