@@ -174,6 +174,7 @@ Configuration Functions
 -----------------------
 - `configure(function, max_value, resolution)` - Set measurement parameters
 - `set_nplc(nplc)` - Set integration time
+- `initiate_trigger_model()` - Initiate the pre-configured trigger model
 - `connect(address)` - Establish connection
 - `disconnect()` - Close connection
 
@@ -486,6 +487,24 @@ class DMM6500:
         if st not in ("ON", "OFF"):
             raise ValueError("Autozero must be 'ON' or 'OFF'.")
         self.instrument.write(f"SENSe:AZERo {st}")
+
+    def initiate_trigger_model(self) -> None:
+        """Initiate the currently loaded trigger model.
+
+        Sends ``:INIT`` to start execution of the pre-configured trigger model
+        on the instrument.
+
+        Returns:
+            None
+
+        Raises:
+            ConnectionError: If the instrument is not connected.
+
+        Example:
+            >>> dmm.initiate_trigger_model()
+        """
+        self._chk()
+        self.instrument.write(":INIT")
 
     def configure(self, measurement_type: str, range_val: float, resolution_val: float) -> None:
         """
