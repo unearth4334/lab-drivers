@@ -15,6 +15,7 @@ pip-wheel-metadata/
 # Local wiki generation artifacts
 test_wiki_output/
 wiki-repo/
+artifacts/
 
 # Virtual environments
 .venv/

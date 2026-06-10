@@ -200,13 +200,11 @@ class RigolDP711:
 
         Args:
             item: Measurement selector. Supported values are ``"CURR"``, ``"CURRENT"``,
-                ``"VOLT"``, ``"VOLTAGE"``, ``"OUTP"``, and ``"OUTPUT"``
-                (case-insensitive).
+                ``"VOLT"``, and ``"VOLTAGE"`` (case-insensitive).
             channel: Unused placeholder for API compatibility.
 
         Returns:
-            Measurement value in base SI units (A or V), or ``1.0``/``0.0``
-            for output enabled/disabled.
+            Measurement value in base SI units (A or V).
 
         Raises:
             ValueError: If ``item`` is not supported.
@@ -224,9 +222,7 @@ class RigolDP711:
             "CURR": self.measure_current,
             "CURRENT": self.measure_current,
             "VOLT": self.measure_voltage,
-            "VOLTAGE": self.measure_voltage,
-            "OUTP": lambda: 1.0 if self.get_output_state() else 0.0,
-            "OUTPUT": lambda: 1.0 if self.get_output_state() else 0.0,
+            "VOLTAGE": self.measure_voltage
         }
         
         if item_upper not in items:
@@ -287,46 +283,6 @@ class RigolDP711:
         command = f':CURR {current:.3f}'
         self._write(command)
 
-    def get_voltage_setpoint(self) -> float:
-        """
-        Read back the programmed voltage setpoint.
-
-        Returns:
-            Voltage setpoint in volts.
-
-        Raises:
-            ValueError: If the returned value cannot be parsed.
-            ConnectionError: If the device is not connected.
-
-        Example:
-            >>> vset = psu.get_voltage_setpoint()
-        """
-        try:
-            response = self._query(':VOLT?')
-            return float(response)
-        except ValueError as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to parse voltage setpoint: {e}")
-
-    def get_current_setpoint(self) -> float:
-        """
-        Read back the programmed current limit setpoint.
-
-        Returns:
-            Current limit setpoint in amperes.
-
-        Raises:
-            ValueError: If the returned value cannot be parsed.
-            ConnectionError: If the device is not connected.
-
-        Example:
-            >>> iset = psu.get_current_setpoint()
-        """
-        try:
-            response = self._query(':CURR?')
-            return float(response)
-        except ValueError as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to parse current setpoint: {e}")
-
     def measure_voltage(self) -> float:
         """
         Measure the actual output voltage.
@@ -371,6 +327,11 @@ class RigolDP711:
         """
         Enable or disable the power supply output.
 
+        Sends the absolute SCPI command (``:OUTP ON`` / ``:OUTP OFF``) rather
+        than a toggle, so the requested state is applied regardless of the
+        current output state. The state is then read back and re-asserted once
+        if the device did not report the requested state.
+
         Args:
             state: ``True`` to enable output, ``False`` to disable output.
 
@@ -384,46 +345,46 @@ class RigolDP711:
             >>> psu.set_output_state(True)
         """
         self._chk()
-        
-        if state:
-            command = ':OUTP ON'
-            print(_SUCCESS_STYLE + "Rigol DP711 output: ON")
-        else:
-            command = ':OUTP OFF'
-            print(_SUCCESS_STYLE + "Rigol DP711 output: OFF")
-        
+
+        command = ':OUTP ON' if state else ':OUTP OFF'
         self._write(command)
+
+        # Verify the absolute state took effect; re-assert once if needed. This
+        # guards against a missed command when the output was already enabled.
+        try:
+            if self.get_output_state() != state:
+                self._write(command)
+        except Exception:
+            # If the device state cannot be read back, fall back to the
+            # absolute write already issued above.
+            pass
+
+        print(_SUCCESS_STYLE + f"Rigol DP711 output: {'ON' if state else 'OFF'}")
 
     def get_output_state(self) -> bool:
         """
-        Read back whether the output is enabled.
+        Query the current output state.
 
         Returns:
-            ``True`` when output is enabled, ``False`` when disabled.
+            ``True`` if the output is enabled, ``False`` otherwise.
 
         Raises:
-            ValueError: If the instrument returns an unexpected output-state value.
             ConnectionError: If the device is not connected.
+            ValueError: If the device response cannot be parsed.
 
         Example:
-            >>> is_on = psu.get_output_state()
+            >>> psu.get_output_state()
+            True
         """
+        self._chk()
         response = self._query(':OUTP?').strip().upper()
-
-        if response in ("ON", "1"):
+        if response in ('ON', '1'):
             return True
-        if response in ("OFF", "0"):
+        if response in ('OFF', '0'):
             return False
-
-        raise ValueError(_ERROR_STYLE + f"Unexpected :OUTP? response: {response!r}")
-
-    def enable_output(self) -> None:
-        """Enable output power (alias for :meth:`turn_on`)."""
-        self.turn_on()
-
-    def disable_output(self) -> None:
-        """Disable output power (alias for :meth:`turn_off`)."""
-        self.turn_off()
+        raise ValueError(
+            _ERROR_STYLE + f"Failed to parse output state response: {response!r}"
+        )
 
     def turn_on(self) -> None:
         """

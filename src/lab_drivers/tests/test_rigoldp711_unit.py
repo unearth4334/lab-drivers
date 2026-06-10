@@ -31,11 +31,30 @@ class TestRigolDP711Unit(unittest.TestCase):
         self.psu.ser.write.assert_called_with(b":CURR 2.500\r\n")
 
     def test_set_output_state_on_and_off(self) -> None:
+        # Report the requested state so no re-assert write is issued.
+        self.psu.get_output_state = MagicMock(return_value=True)
         self.psu.set_output_state(True)
-        self.psu.ser.write.assert_called_with(b":OUTP ON\r\n")
+        self.psu.ser.write.assert_any_call(b":OUTP ON\r\n")
 
+        self.psu.get_output_state = MagicMock(return_value=False)
         self.psu.set_output_state(False)
-        self.psu.ser.write.assert_called_with(b":OUTP OFF\r\n")
+        self.psu.ser.write.assert_any_call(b":OUTP OFF\r\n")
+
+    def test_set_output_state_reasserts_on_mismatch(self) -> None:
+        # Device reports the wrong state, so the absolute command is re-sent.
+        self.psu.get_output_state = MagicMock(return_value=False)
+        self.psu.set_output_state(True)
+        on_writes = [
+            call for call in self.psu.ser.write.call_args_list
+            if call.args[0] == b":OUTP ON\r\n"
+        ]
+        self.assertEqual(len(on_writes), 2)
+
+    def test_set_output_state_is_absolute_when_already_enabled(self) -> None:
+        # Output already enabled: enabling again still issues the absolute ON.
+        self.psu.get_output_state = MagicMock(return_value=True)
+        self.psu.set_output_state(True)
+        self.psu.ser.write.assert_any_call(b":OUTP ON\r\n")
 
     def test_get_voltage_setpoint_uses_query(self) -> None:
         self.psu._query = MagicMock(return_value="5.000")
