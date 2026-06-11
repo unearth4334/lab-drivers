@@ -86,6 +86,74 @@ class TestBK4055BUnit(unittest.TestCase):
         with self.assertRaises(ConnectionError):
             wfg.set_frequency(1000.0, channel=1)
 
+    @patch("lab_drivers.drivers.visa.BK4055B.BK4055B._discover_lan_hosts", return_value=[])
+    @patch("lab_drivers.drivers.visa.BK4055B.pyvisa.ResourceManager")
+    def test_connect_auto_detect_prefers_usb_before_tcpip(
+        self,
+        mock_rm_ctor: MagicMock,
+        _mock_discover: MagicMock,
+    ) -> None:
+        rm = MagicMock()
+        mock_rm_ctor.return_value = rm
+
+        usb = "USB0::0xF4EC::0x1101::SN123::INSTR"
+        tcp = "TCPIP0::169.254.209.10::inst0::INSTR"
+        rm.list_resources.return_value = (tcp, usb)
+
+        usb_inst = MagicMock()
+        usb_inst.query.return_value = "B&K Precision,4055B,SN123,1.00"
+
+        def _open_resource(resource: str) -> MagicMock:
+            if resource == usb:
+                return usb_inst
+            raise AssertionError(f"Unexpected resource attempt: {resource}")
+
+        rm.open_resource.side_effect = _open_resource
+
+        wfg = BK4055B(auto_connect=False)
+        wfg.connect()
+
+        self.assertEqual(wfg.address, usb)
+        self.assertEqual(rm.open_resource.call_count, 1)
+        rm.open_resource.assert_called_once_with(usb)
+
+    @patch("lab_drivers.drivers.visa.BK4055B.BK4055B._discover_lan_hosts", return_value=[])
+    @patch("lab_drivers.drivers.visa.BK4055B.pyvisa.ResourceManager")
+    def test_connect_auto_detect_falls_back_to_tcpip_after_usb(
+        self,
+        mock_rm_ctor: MagicMock,
+        _mock_discover: MagicMock,
+    ) -> None:
+        rm = MagicMock()
+        mock_rm_ctor.return_value = rm
+
+        usb = "USB0::0xF4EC::0x1101::SN123::INSTR"
+        tcp = "TCPIP0::169.254.209.10::inst0::INSTR"
+        rm.list_resources.return_value = (tcp, usb)
+
+        usb_inst = MagicMock()
+        usb_inst.query.return_value = "Some Vendor,Model1234,SN,1.0"
+
+        tcp_inst = MagicMock()
+        tcp_inst.query.return_value = "B&K Precision,4055B,SN999,1.00"
+
+        def _open_resource(resource: str) -> MagicMock:
+            if resource == usb:
+                return usb_inst
+            if resource == tcp:
+                return tcp_inst
+            raise AssertionError(f"Unexpected resource attempt: {resource}")
+
+        rm.open_resource.side_effect = _open_resource
+
+        wfg = BK4055B(auto_connect=False)
+        wfg.connect()
+
+        self.assertEqual(wfg.address, tcp)
+        self.assertEqual(rm.open_resource.call_count, 2)
+        self.assertEqual(rm.open_resource.call_args_list[0].args[0], usb)
+        self.assertEqual(rm.open_resource.call_args_list[1].args[0], tcp)
+
     def test_upload_arbitrary_waveform_sends_wvdt_and_select(self) -> None:
         wfg = self._make_connected()
         wfg.upload_arbitrary_waveform(

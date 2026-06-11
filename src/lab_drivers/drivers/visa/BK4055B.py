@@ -374,17 +374,18 @@ class BK4055B:
         """
         Establish connection to BK4055B waveform generator.
 
-        Connection is attempted in order: (1) an explicit ``address``; (2) a
-        VISA bus scan (USB/GPIB and registered TCPIP aliases) matching the
-        model in ``*IDN?``; (3) zero-config LAN discovery via mDNS/LXI when the
-        optional ``zeroconf`` dependency (the ``lan`` extra) is installed. The
+        Connection is attempted in order: (1) an explicit ``address``; (2) USB
+        VISA resources discovered on the local bus; (3) Ethernet/TCPIP VISA
+        resources from the local VISA registry; (4) zero-config LAN discovery
+        via mDNS/LXI when the optional ``zeroconf`` dependency (the ``lan``
+        extra) is installed. The
         LAN fallback lets the instrument run on DHCP and be found automatically,
         so no per-user static IP configuration is required.
 
         Args:
             address: Optional explicit VISA resource string. If None, auto-detect
-                by scanning the bus and matching the model in ``*IDN?``, then by
-                mDNS LAN discovery.
+                by trying USB resources first, then Ethernet/TCPIP resources,
+                then mDNS LAN discovery.
 
         Raises:
             ConnectionError: If device not found or connection fails.
@@ -423,13 +424,20 @@ class BK4055B:
                 raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to '{explicit}': {e}")
 
         # 2) Auto-detect by scanning resources and matching *IDN?
+        #    Priority is USB first, then TCPIP (Ethernet), then all others.
         if self.instrument is None:
             try:
                 resources = list(self.rm.list_resources())
             except pyvisa.VisaIOError as e:
                 raise ConnectionError(_ERROR_STYLE + f"PyVISA is not able to find any devices: {e}")
 
-            for resource in resources:
+            usb_resources = [r for r in resources if r.upper().startswith("USB")]
+            tcpip_resources = [r for r in resources if r.upper().startswith("TCPIP")]
+            other_resources = [
+                r for r in resources if not r.upper().startswith("USB") and not r.upper().startswith("TCPIP")
+            ]
+
+            for resource in [*usb_resources, *tcpip_resources, *other_resources]:
                 try:
                     inst = self.rm.open_resource(resource)
                     inst.read_termination = '\n'
