@@ -1,6 +1,7 @@
 """VISA-backed instrument drivers."""
 
 __all__ = [
+	"BK4055B",
 	"DL3021",
 	"DMM6500",
 	"DP832",

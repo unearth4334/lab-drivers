@@ -6,6 +6,7 @@ This section is intentionally minimal and generated from source docstrings.
 
 | Driver | Module path | Page |
 | --- | --- | --- |
+| BK4055B | `lab_drivers.drivers.visa.BK4055B.BK4055B` | [BK4055B](drivers/bk4055b.md) |
 | DL3021 | `lab_drivers.drivers.visa.DL3021.DL3021` | [DL3021](drivers/dl3021.md) |
 | DMM6500 | `lab_drivers.drivers.visa.DMM6500.DMM6500` | [DMM6500](drivers/dmm6500.md) |
 | DP832 | `lab_drivers.drivers.visa.DP832.DP832` | [DP832](drivers/dp832.md) |

@@ -21,6 +21,7 @@ dependencies = [
 visa = ["pyvisa>=1.11"]
 serial = ["pyserial>=3.5"]
 saleae = ["logic2-automation>=1.0.0"]
+lan = ["zeroconf>=0.130"]
 plot = ["matplotlib>=3.5"]
 docs = [
   "mkdocs>=1.6",
@@ -32,6 +33,7 @@ all = [
   "pyvisa>=1.11",
   "pyserial>=3.5",
   "logic2-automation>=1.0.0",
+  "zeroconf>=0.130",
   "matplotlib>=3.5",
   "mkdocs>=1.6",
   "mkdocs-material>=9.5",
