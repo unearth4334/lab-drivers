@@ -172,6 +172,12 @@ class TestBK4055BUnit(unittest.TestCase):
         with self.assertRaises(ValueError):
             wfg.ramp_to_level(target_v=1.0, slew_rate_v_per_s=0.0)
 
+    @patch("lab_drivers.drivers.visa.BK4055B.BK4055B.ramp_to_level_safe")
+    def test_ramp_to_wrapper_calls_ramp_to_level_safe(self, mock_safe: MagicMock) -> None:
+        wfg = self._make_connected()
+        wfg.ramp_to(target_v=2.0, slew_rate_v_per_s=0.5, channel=1)
+        mock_safe.assert_called_once()
+
     @patch("lab_drivers.drivers.visa.BK4055B.BK4055B.ramp_to_level")
     def test_ramp_down_wrapper_calls_ramp_to_level(self, mock_ramp_to_level: MagicMock) -> None:
         wfg = self._make_connected()

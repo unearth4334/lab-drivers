@@ -216,6 +216,7 @@ Configuration Functions
 - `set_amplitude(amplitude, channel)` - Set amplitude (Vpp)
 - `set_offset(offset, channel)` - Set DC offset (V)
 - `set_dc_level(level, channel, ...)` - Set DC output level directly
+- `ramp_to(target_v, slew_rate_v_per_s, ...)` - Simple ramp from current setpoint using safe sequencing
 - `ramp_to_level(target_v, slew_rate_v_per_s, ...)` - Slew-limited stepped DC ramp
 - `ramp_to_level_safe(target_v, slew_rate_v_per_s, ...)` - Safe ramp sequence with output muted during mode switch
 - `ramp_up_stay_up(...)` - Convenience wrapper to ramp and hold high
@@ -994,6 +995,48 @@ class BK4055B:
 
         if output_on:
             self.set_output_state(True, channel=channel)
+
+    def ramp_to(
+        self,
+        target_v: float,
+        slew_rate_v_per_s: float,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        output_on: bool = False,
+    ) -> None:
+        """
+        Ramp from current setpoint to target at a specified slew rate.
+
+        This is the simple user-facing API and uses ``ramp_to_level_safe`` to
+        minimize output transients on hardware mode/range boundaries.
+
+        Args:
+            target_v: Final DC level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            output_on: If True, enable output after ramp completion.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If slew rate or step size are invalid.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_to(target_v=5.0, slew_rate_v_per_s=0.5, channel=1)
+        """
+        self.ramp_to_level_safe(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            output_on=output_on,
+        )
 
     def ramp_to_level_safe(
         self,
