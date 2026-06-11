@@ -157,6 +157,31 @@ print(f"Amplitude: {wfg.get('amplitude', channel=1):.6f} V")
 print(f"Output on: {wfg.get('output', channel=1)}")
 ```
 
+Arbitrary Waveforms
+-------------------
+```python
+# Create a custom waveform that ramps 0 -> 5V and then holds at 5V
+wfg.configure_ramp_hold_0_to_5(
+    frequency=1000.0,
+    ramp_fraction=0.2,
+    sample_count=1024,
+    name="RAMP_HOLD",
+    channel=1,
+)
+
+# Enable output when ready
+wfg.set_output_state(True, channel=1)
+
+# Or load waveform points from a hand-edited file (CSV or whitespace text)
+# containing normalized samples in [0.0, 1.0]
+wfg.upload_arbitrary_waveform_file(
+    file_path="my_waveform.csv",
+    name="MY_WAVE",
+    frequency=500.0,
+    channel=1,
+)
+```
+
 Integration with data_logger
 -----------------------------
 ```python
@@ -190,6 +215,13 @@ Configuration Functions
 - `set_frequency(frequency, channel)` - Set frequency (Hz)
 - `set_amplitude(amplitude, channel)` - Set amplitude (Vpp)
 - `set_offset(offset, channel)` - Set DC offset (V)
+- `set_dc_level(level, channel, ...)` - Set DC output level directly
+- `ramp_to_level(target_v, slew_rate_v_per_s, ...)` - Slew-limited stepped DC ramp
+- `ramp_to_level_safe(target_v, slew_rate_v_per_s, ...)` - Safe ramp sequence with output muted during mode switch
+- `ramp_up_stay_up(...)` - Convenience wrapper to ramp and hold high
+- `ramp_down_stay_down(...)` - Convenience wrapper to ramp and hold low
+- `ramp_up_stay_up_safe(...)` - Safe-sequence wrapper to ramp and hold high
+- `ramp_down_stay_down_safe(...)` - Safe-sequence wrapper to ramp and hold low
 - `set_phase(phase, channel)` - Set phase (degrees)
 - `set_duty_cycle(duty, channel)` - Set square-wave duty cycle (%)
 - `set_symmetry(symmetry, channel)` - Set ramp-wave symmetry (%)
@@ -197,6 +229,9 @@ Configuration Functions
 - `set_load(load, channel)` - Set output load (ohm or "HZ")
 - `set_output_state(state, channel)` - Enable/disable output
 - `configure_sine(frequency, amplitude, offset, channel)` - One-call sine setup
+- `upload_arbitrary_waveform(samples, name, ...)` - Upload/select custom ARB waveform
+- `upload_arbitrary_waveform_file(file_path, name, ...)` - Load samples from file and upload
+- `configure_ramp_hold_0_to_5(...)` - Convenience helper for 0->5V ramp then hold
 
 Measurement / Readback Functions
 ---------------------------------
@@ -234,6 +269,8 @@ SCPI Command Reference
 - ``Cx:OUTP ON|OFF`` - Enable/disable output
 - ``Cx:OUTP LOAD,<ohm|HZ>`` - Set output load
 - ``Cx:OUTP?`` - Query output state
+- ``Cx:WVDT WVNM,<name>,...,WAVEDATA,<d0>,<d1>,...`` - Upload user ARB data
+- ``Cx:ARWV NAME,<name>`` - Select uploaded ARB waveform
 
 Technical Specifications
 ------------------------
@@ -254,6 +291,7 @@ from __future__ import annotations
 
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import pyvisa
@@ -289,6 +327,9 @@ _DELAY = 0.1
 
 # Accepted basic-waveform type tokens (SDG/BK command set)
 _FUNCTIONS = ("SINE", "SQUARE", "RAMP", "PULSE", "NOISE", "ARB", "DC")
+
+# 4055B arbitrary waveform maximum points per channel
+_MAX_ARB_POINTS = 16384
 
 # LXI service types advertised by LAN-capable SCPI instruments
 _LXI_SERVICES = ("_scpi-raw._tcp.local.", "_vxi-11._tcp.local.", "_lxi._tcp.local.")
@@ -841,6 +882,566 @@ class BK4055B:
             print(command)
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
+
+    def set_dc_level(
+        self,
+        level: float,
+        channel: int = 1,
+        ensure_dc: bool = True,
+        settle_s: float = _DELAY,
+    ) -> None:
+        """
+        Set a channel to a specific DC output level.
+
+        Args:
+            level: Target DC level in volts.
+            channel: Output channel (1 or 2).
+            ensure_dc: If True, switch the channel waveform type to DC first.
+            settle_s: Optional settle delay after writing the level.
+
+        Raises:
+            ConnectionError: If not connected to device.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.set_dc_level(2.5, channel=1)
+        """
+        self._chk()
+        if ensure_dc:
+            self.set_function("DC", channel=channel)
+
+        command = f"C{channel}:BSWV OFST,{level}"
+        if self.debug:
+            print(command)
+        self.instrument.write(command)
+        if settle_s > 0.0:
+            time.sleep(settle_s)
+
+    def ramp_to_level(
+        self,
+        target_v: float,
+        slew_rate_v_per_s: float,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        ensure_dc: bool = True,
+        output_on: bool = False,
+    ) -> None:
+        """
+        Ramp DC level to a target using fixed steps and a specified slew rate.
+
+        The method reads the current offset, then steps toward ``target_v``.
+        Step timing is chosen so each step obeys ``slew_rate_v_per_s``.
+
+        Args:
+            target_v: Final DC level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s (must be > 0).
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts (must be > 0).
+            dwell_s: Minimum dwell after each step in seconds.
+            ensure_dc: If True, force waveform type to DC before ramping.
+            output_on: If True, enable output after ramp completion.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If slew rate or step size are invalid.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_to_level(target_v=5.0, slew_rate_v_per_s=1.0, channel=1)
+        """
+        self._chk()
+        if slew_rate_v_per_s <= 0.0:
+            raise ValueError(_ERROR_STYLE + "slew_rate_v_per_s must be > 0.")
+        if step_v <= 0.0:
+            raise ValueError(_ERROR_STYLE + "step_v must be > 0.")
+
+        cfg = self.get_waveform_config(channel=channel)
+        start_v = self._parse_value(cfg.get("OFST", "0"))
+
+        if ensure_dc and cfg.get("WVTP", "").upper() != "DC":
+            # Preserve the pre-switch offset to avoid a visible 0V dip while
+            # changing WVTP to DC.
+            self.set_function("DC", channel=channel)
+            self.set_dc_level(start_v, channel=channel, ensure_dc=False, settle_s=0.0)
+            cfg = self.get_waveform_config(channel=channel)
+            start_v = self._parse_value(cfg.get("OFST", str(start_v)))
+        delta = target_v - start_v
+        if abs(delta) < 1e-12:
+            if output_on:
+                self.set_output_state(True, channel=channel)
+            return
+
+        direction = 1.0 if delta > 0.0 else -1.0
+        current = start_v
+
+        while (target_v - current) * direction > step_v:
+            next_v = current + direction * step_v
+            self.set_dc_level(next_v, channel=channel, ensure_dc=False, settle_s=0.0)
+            wait_s = max(abs(next_v - current) / slew_rate_v_per_s, dwell_s)
+            if wait_s > 0.0:
+                time.sleep(wait_s)
+            current = next_v
+
+        self.set_dc_level(target_v, channel=channel, ensure_dc=False, settle_s=0.0)
+        final_wait_s = max(abs(target_v - current) / slew_rate_v_per_s, dwell_s)
+        if final_wait_s > 0.0:
+            time.sleep(final_wait_s)
+
+        if output_on:
+            self.set_output_state(True, channel=channel)
+
+    def ramp_to_level_safe(
+        self,
+        target_v: float,
+        slew_rate_v_per_s: float,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        start_v: Optional[float] = None,
+        output_on: bool = True,
+    ) -> None:
+        """
+        Ramp to a target using a safe DC-transition sequence.
+
+        This method prevents visible transients caused by internal range/mode
+        switching. If the channel is not already in DC mode, it uses:
+        1) output OFF, 2) set WVTP=DC, 3) preload start level, 4) output ON,
+        5) run slew-limited ramp.
+
+        If already in DC mode, it skips output muting to avoid an apparent
+        drop-to-zero at ramp start.
+
+        Args:
+            target_v: Final DC level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            start_v: Optional explicit ramp start level. If None, uses current
+                configured offset from ``BSWV?``.
+            output_on: If True, keep output enabled at method exit.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If parameters are invalid.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_to_level_safe(target_v=5.0, slew_rate_v_per_s=0.5)
+        """
+        self._chk()
+
+        cfg = self.get_waveform_config(channel=channel)
+        current_mode = cfg.get("WVTP", "").upper()
+        current_v = self._parse_value(cfg.get("OFST", "0"))
+        initial_v = current_v if start_v is None else float(start_v)
+
+        if current_mode != "DC":
+            self.set_output_state(False, channel=channel)
+            self.set_function("DC", channel=channel)
+            self.set_dc_level(initial_v, channel=channel, ensure_dc=False, settle_s=0.0)
+            if output_on:
+                self.set_output_state(True, channel=channel)
+        elif abs(initial_v - current_v) > 1e-12:
+            # Already in DC mode: do not mute output unless caller requests
+            # output_off at end. Just rebase start level directly.
+            self.set_dc_level(initial_v, channel=channel, ensure_dc=False, settle_s=0.0)
+
+        self.ramp_to_level(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            ensure_dc=False,
+            output_on=False,
+        )
+
+        if not output_on:
+            self.set_output_state(False, channel=channel)
+
+    def ramp_up_stay_up(
+        self,
+        target_v: float = 5.0,
+        slew_rate_v_per_s: float = 1.0,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        ensure_dc: bool = True,
+        output_on: bool = False,
+    ) -> None:
+        """
+        Ramp DC level upward and hold at the final high level.
+
+        Args:
+            target_v: Final high level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            ensure_dc: If True, force waveform type to DC before ramping.
+            output_on: If True, enable output after ramp completion.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_up_stay_up(target_v=5.0, slew_rate_v_per_s=0.5)
+        """
+        self.ramp_to_level(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            ensure_dc=ensure_dc,
+            output_on=output_on,
+        )
+
+    def ramp_down_stay_down(
+        self,
+        target_v: float = 0.0,
+        slew_rate_v_per_s: float = 1.0,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        ensure_dc: bool = True,
+        output_on: bool = False,
+    ) -> None:
+        """
+        Ramp DC level downward and hold at the final low level.
+
+        Args:
+            target_v: Final low level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            ensure_dc: If True, force waveform type to DC before ramping.
+            output_on: If True, enable output after ramp completion.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_down_stay_down(target_v=0.0, slew_rate_v_per_s=0.5)
+        """
+        self.ramp_to_level(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            ensure_dc=ensure_dc,
+            output_on=output_on,
+        )
+
+    def ramp_up_stay_up_safe(
+        self,
+        target_v: float = 5.0,
+        slew_rate_v_per_s: float = 1.0,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        start_v: Optional[float] = None,
+        output_on: bool = True,
+    ) -> None:
+        """
+        Safe-sequence wrapper to ramp DC upward and hold at the high level.
+
+        Args:
+            target_v: Final high level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            start_v: Optional explicit ramp start level.
+            output_on: If True, keep output enabled at method exit.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_up_stay_up_safe(target_v=5.0, slew_rate_v_per_s=0.5)
+        """
+        self.ramp_to_level_safe(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            start_v=start_v,
+            output_on=output_on,
+        )
+
+    def ramp_down_stay_down_safe(
+        self,
+        target_v: float = 0.0,
+        slew_rate_v_per_s: float = 1.0,
+        channel: int = 1,
+        step_v: float = 0.05,
+        dwell_s: float = 0.0,
+        start_v: Optional[float] = None,
+        output_on: bool = True,
+    ) -> None:
+        """
+        Safe-sequence wrapper to ramp DC downward and hold at the low level.
+
+        Args:
+            target_v: Final low level in volts.
+            slew_rate_v_per_s: Requested slew rate in V/s.
+            channel: Output channel (1 or 2).
+            step_v: Step size in volts.
+            dwell_s: Minimum dwell after each step in seconds.
+            start_v: Optional explicit ramp start level.
+            output_on: If True, keep output enabled at method exit.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.ramp_down_stay_down_safe(target_v=0.0, slew_rate_v_per_s=0.5)
+        """
+        self.ramp_to_level_safe(
+            target_v=target_v,
+            slew_rate_v_per_s=slew_rate_v_per_s,
+            channel=channel,
+            step_v=step_v,
+            dwell_s=dwell_s,
+            start_v=start_v,
+            output_on=output_on,
+        )
+
+    def upload_arbitrary_waveform(
+        self,
+        samples: List[float],
+        name: str = "wave1",
+        channel: int = 1,
+        frequency: float = 1000.0,
+        amplitude: float = 5.0,
+        offset: float = 2.5,
+        phase: float = 0.0,
+        select: bool = True,
+    ) -> None:
+        """
+        Upload a custom arbitrary waveform to user memory.
+
+        The 4055B accepts user-waveform data with ``Cx:WVDT``. This method
+        takes normalized samples in the range [0.0, 1.0], maps them to 14-bit
+        DAC codes [0, 16383], uploads them, and optionally selects the uploaded
+        waveform for output using ``Cx:ARWV`` + ``Cx:BSWV WVTP,ARB``.
+
+        Args:
+            samples: Normalized waveform points in [0.0, 1.0].
+            name: User-waveform name in instrument memory.
+            channel: Output channel (1 or 2).
+            frequency: Output repetition frequency in Hz.
+            amplitude: Output amplitude in Vpp when ARB mode is active.
+            offset: Output DC offset in volts when ARB mode is active.
+            phase: Output phase in degrees when ARB mode is active.
+            select: If True, select this waveform as the active ARB.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If sample values are out of range or too few points are
+                provided.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.upload_arbitrary_waveform([0.0, 0.5, 1.0, 1.0], name="RAMP_HOLD")
+        """
+        self._chk()
+        if len(samples) < 4:
+            raise ValueError(_ERROR_STYLE + "Arbitrary waveform requires at least 4 samples.")
+        if len(samples) > _MAX_ARB_POINTS:
+            raise ValueError(
+                _ERROR_STYLE
+                + f"Arbitrary waveform exceeds {_MAX_ARB_POINTS} points (got {len(samples)})."
+            )
+
+        dac_values: List[int] = []
+        for value in samples:
+            if value < 0.0 or value > 1.0:
+                raise ValueError(_ERROR_STYLE + "Samples must be normalized to [0.0, 1.0].")
+            dac_values.append(int(round(value * 16383.0)))
+
+        data_csv = ",".join(str(v) for v in dac_values)
+        command = f"C{channel}:WVDT WVNM,{name},WAVEDATA,{data_csv}"
+        if self.debug:
+            print(command)
+        self.instrument.write(command)
+        self.loading.delay_with_loading_indicator(_DELAY)
+
+        if select:
+            select_command = f"C{channel}:ARWV NAME,{name}"
+            if self.debug:
+                print(select_command)
+            self.instrument.write(select_command)
+            self.instrument.write(f"C{channel}:BSWV WVTP,ARB")
+            # Configure ARB playback parameters after selecting the uploaded
+            # waveform. This is more robust than embedding metadata in WVDT.
+            self.instrument.write(f"C{channel}:BSWV FRQ,{frequency}")
+            self.instrument.write(f"C{channel}:BSWV AMP,{amplitude}")
+            self.instrument.write(f"C{channel}:BSWV OFST,{offset}")
+            self.instrument.write(f"C{channel}:BSWV PHSE,{phase}")
+            self.loading.delay_with_loading_indicator(_DELAY)
+
+    def upload_arbitrary_waveform_file(
+        self,
+        file_path: str,
+        name: str = "wave1",
+        channel: int = 1,
+        frequency: float = 1000.0,
+        amplitude: float = 5.0,
+        offset: float = 2.5,
+        phase: float = 0.0,
+        select: bool = True,
+    ) -> None:
+        """
+        Load waveform points from an ASCII CSV/DAT file and upload as ARB data.
+
+        File format:
+        - Numeric sample values normalized to [0.0, 1.0]
+        - Comma, whitespace, or newline separators are accepted
+        - Lines may contain comments starting with ``#``
+        - Typical extensions are ``.csv`` and ``.dat`` (ASCII text)
+        - Maximum point count is 16384 samples per channel
+
+        Args:
+            file_path: Path to text/CSV waveform file.
+            name: User-waveform name in instrument memory.
+            channel: Output channel (1 or 2).
+            frequency: Output repetition frequency in Hz.
+            amplitude: Output amplitude in Vpp when ARB mode is active.
+            offset: Output DC offset in volts when ARB mode is active.
+            phase: Output phase in degrees when ARB mode is active.
+            select: If True, select this waveform as the active ARB.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If the file has no valid numeric samples.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.upload_arbitrary_waveform_file("ramp_hold.csv", name="RAMP_HOLD")
+        """
+        self._chk()
+
+        path = Path(file_path)
+        if not path.exists():
+            raise ValueError(_ERROR_STYLE + f"Waveform file not found: {file_path}")
+
+        suffix = path.suffix.lower()
+        if suffix and suffix not in (".csv", ".dat", ".txt"):
+            raise ValueError(
+                _ERROR_STYLE
+                + f"Unsupported waveform file extension '{path.suffix}'. Use .csv or .dat ASCII files."
+            )
+
+        values: List[float] = []
+        try:
+            file_text = path.read_text(encoding="ascii")
+        except UnicodeDecodeError as e:
+            raise ValueError(_ERROR_STYLE + f"Waveform file must be ASCII text: {file_path}") from e
+
+        for line in file_text.splitlines():
+            cleaned = line.split("#", 1)[0].strip()
+            if not cleaned:
+                continue
+            parts = re.split(r"[\s,;]+", cleaned)
+            for token in parts:
+                if token:
+                    values.append(float(token))
+
+        if not values:
+            raise ValueError(_ERROR_STYLE + f"Waveform file contains no numeric samples: {file_path}")
+
+        self.upload_arbitrary_waveform(
+            samples=values,
+            name=name,
+            channel=channel,
+            frequency=frequency,
+            amplitude=amplitude,
+            offset=offset,
+            phase=phase,
+            select=select,
+        )
+
+    def configure_ramp_hold_0_to_5(
+        self,
+        frequency: float = 1000.0,
+        ramp_fraction: float = 0.2,
+        sample_count: int = 1024,
+        name: str = "RAMP_HOLD",
+        channel: int = 1,
+        output_on: bool = False,
+    ) -> None:
+        """
+        Configure a 0->5V ramp waveform that then holds at 5V.
+
+        The generated single-cycle waveform ramps from 0V to 5V over
+        ``ramp_fraction`` of the cycle, then stays at 5V for the remainder.
+        Internally this is uploaded as a normalized ARB shape and scaled using
+        ``AMPL=5V`` and ``OFST=2.5V`` so the final output range is 0V..5V.
+
+        Args:
+            frequency: Waveform repetition frequency in Hz.
+            ramp_fraction: Fraction of one cycle used for the linear ramp
+                (0 < ramp_fraction < 1).
+            sample_count: Number of samples in one cycle (>= 8 recommended).
+            name: User-waveform name in instrument memory.
+            channel: Output channel (1 or 2).
+            output_on: If True, enable output after configuration.
+
+        Raises:
+            ConnectionError: If not connected to device.
+            ValueError: If parameters are invalid.
+
+        Returns:
+            None
+
+        Example:
+            >>> wfg.configure_ramp_hold_0_to_5(frequency=1000.0, ramp_fraction=0.2)
+        """
+        self._chk()
+        if sample_count < 8:
+            raise ValueError(_ERROR_STYLE + "sample_count must be >= 8.")
+        if ramp_fraction <= 0.0 or ramp_fraction >= 1.0:
+            raise ValueError(_ERROR_STYLE + "ramp_fraction must be between 0 and 1.")
+
+        ramp_points = max(2, int(round(sample_count * ramp_fraction)))
+        hold_points = sample_count - ramp_points
+        if hold_points < 1:
+            hold_points = 1
+            ramp_points = sample_count - 1
+
+        ramp = [i / float(ramp_points - 1) for i in range(ramp_points)]
+        hold = [1.0] * hold_points
+        waveform = ramp + hold
+
+        self.upload_arbitrary_waveform(
+            waveform,
+            name=name,
+            channel=channel,
+            frequency=frequency,
+            amplitude=5.0,
+            offset=2.5,
+            phase=0.0,
+            select=True,
+        )
+        if output_on:
+            self.set_output_state(True, channel=channel)
 
     # --- Readback ---
 
