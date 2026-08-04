@@ -312,26 +312,14 @@ from typing import Optional
 
 import pyvisa
 import pyvisa.constants
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.progress import loading
 
-# Set up logger for PS310 interactions
-logger = logging.getLogger(__name__)
-
-try:
-    from .loading import loading
-except ImportError:
-    try:
-        from loading import loading
-    except ImportError:
-        class loading:
-            """Fallback loading class if module not available."""
-            def delay_with_loading_indicator(self, seconds: float) -> None:
-                time.sleep(seconds)
+_log = get_logger(__name__)
+#: Retained for callers that referenced this module's logger by name.
+logger = _log
 
 # Constants and global variables
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.1  # seconds
 
 # PS310 specifications
@@ -358,7 +346,6 @@ class StanfordPS310:
             auto_connect: If True, automatically connect to the device.
             address: Optional VISA resource string. If None, auto-detect.
         """
-        init(autoreset=True)
 
         self.rm = pyvisa.ResourceManager()
         self.address: Optional[str] = None
@@ -437,12 +424,12 @@ class StanfordPS310:
                 else:
                     inst.close()
                     raise ConnectionError(
-                        _ERROR_STYLE + f"Resource '{explicit}' is not a Stanford PS310 (IDN='{idn}')."
+                        f"Resource '{explicit}' is not a Stanford PS310 (IDN='{idn}')."
                     )
             except pyvisa.errors.VisaIOError as e:
                 self._log_interaction("Failed to open resource", error=str(e))
                 raise ConnectionError(
-                    _ERROR_STYLE + f"Failed to open explicit address '{explicit}': {e}"
+                    f"Failed to open explicit address '{explicit}': {e}"
                 )
 
         # Auto-detect by scanning GPIB resources
@@ -468,7 +455,7 @@ class StanfordPS310:
 
         if self.instrument is None:
             raise ConnectionError(
-                _ERROR_STYLE + "Stanford PS310 High Voltage Power Supply not found."
+                "Stanford PS310 High Voltage Power Supply not found."
             )
 
         # Clear status registers
@@ -481,7 +468,7 @@ class StanfordPS310:
 
         self.status = "Connected"
         self._log_interaction("Connection established", response=f"Connected at {self.address}")
-        print(_SUCCESS_STYLE + f"Connected to Stanford PS310 at {self.address} with idn {self._idn}")
+        _log.info(f"Connected to Stanford PS310 at {self.address} with idn {self._idn}")
 
     def disconnect(self) -> None:
         """
@@ -494,7 +481,7 @@ class StanfordPS310:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from Stanford PS310 at {self.address}")
+                _log.info(f"Disconnected from Stanford PS310 at {self.address}")
         self.status = "Not Connected"
         self.instrument = None
         self.address = None
@@ -505,7 +492,7 @@ class StanfordPS310:
     def _check_connection(self) -> None:
         """Verify the device is connected before operations."""
         if self.status != "Connected" or self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to Stanford PS310.")
+            raise ConnectionError("Not connected to Stanford PS310.")
 
     @staticmethod
     def _is_ps310_device(idn: str) -> bool:
@@ -553,7 +540,7 @@ class StanfordPS310:
             return items[item_lower]()
         else:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid item: {item} request to Stanford PS310. "
+                f"Invalid item: {item} request to Stanford PS310. "
                 f"Valid items: {list(items.keys())}"
             )
 
@@ -574,17 +561,17 @@ class StanfordPS310:
         self._check_connection()
 
         if not isinstance(voltage, (int, float)):
-            raise ValueError(_ERROR_STYLE + "Invalid voltage value. Please provide a numeric value.")
+            raise ValueError("Invalid voltage value. Please provide a numeric value.")
 
         if voltage >= 0:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid voltage value '{voltage}'. "
+                f"Invalid voltage value '{voltage}'. "
                 f"This PS310 negative model requires negative voltage values only (must be < 0)."
             )
 
         if abs(voltage) > _PS310_MAX_VOLTAGE:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid voltage value '{voltage}'. "
+                f"Invalid voltage value '{voltage}'. "
                 f"The PS310 accepts voltages between -{_PS310_MAX_VOLTAGE} and 0 V (exclusive)."
             )
 
@@ -596,10 +583,10 @@ class StanfordPS310:
             self.loading.delay_with_loading_indicator(_DELAY)
             self._voltage_has_been_set = True
             self._log_interaction("Voltage set successfully", response=f"{voltage:.3f} V")
-            print(f"\rPS310 voltage set to {voltage:.3f} V")
+            _log.info(f"PS310 voltage set to {voltage:.3f} V")
         except Exception as e:
             self._log_interaction("Failed to set voltage", error=str(e))
-            raise ValueError(_ERROR_STYLE + f"Failed to set voltage on Stanford PS310: {e}")
+            raise ValueError(f"Failed to set voltage on Stanford PS310: {e}")
 
     def get_voltage(self) -> float:
         """
@@ -626,7 +613,7 @@ class StanfordPS310:
             return voltage
         except Exception as e:
             self._log_interaction("Failed to get voltage setpoint", error=str(e))
-            raise ValueError(_ERROR_STYLE + f"Failed to get voltage setpoint from Stanford PS310: {e}")
+            raise ValueError(f"Failed to get voltage setpoint from Stanford PS310: {e}")
 
     def measure_voltage(self, apply_filter: bool = True) -> float:
         """
@@ -674,7 +661,7 @@ class StanfordPS310:
                 return raw_voltage
         except Exception as e:
             self._log_interaction("Failed to measure voltage", error=str(e))
-            raise ValueError(_ERROR_STYLE + f"Failed to measure voltage from Stanford PS310: {e}")
+            raise ValueError(f"Failed to measure voltage from Stanford PS310: {e}")
 
     def _is_potential_glitch(self, prev_voltage: float, current_voltage: float) -> bool:
         """
@@ -766,7 +753,7 @@ class StanfordPS310:
             return current
         except Exception as e:
             self._log_interaction("Failed to measure current", error=str(e))
-            raise ValueError(_ERROR_STYLE + f"Failed to measure current from Stanford PS310: {e}")
+            raise ValueError(f"Failed to measure current from Stanford PS310: {e}")
 
     def set_current_limit(self, current: float) -> None:
         """
@@ -785,11 +772,11 @@ class StanfordPS310:
         self._check_connection()
 
         if not isinstance(current, (int, float)):
-            raise ValueError(_ERROR_STYLE + "Invalid current value. Please provide a numeric value.")
+            raise ValueError("Invalid current value. Please provide a numeric value.")
 
         if current < 0 or current > _PS310_MAX_CURRENT:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid current limit '{current}'. "
+                f"Invalid current limit '{current}'. "
                 f"The PS310 accepts current limits between 0 and {_PS310_MAX_CURRENT * 1000:.1f} mA."
             )
 
@@ -798,9 +785,9 @@ class StanfordPS310:
             command = f"ILIM {current:.6f}"
             self.instrument.write(command)
             self.loading.delay_with_loading_indicator(_DELAY)
-            print(f"\rPS310 current limit set to {current * 1000:.3f} mA")
+            _log.info(f"PS310 current limit set to {current * 1000:.3f} mA")
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to set current limit on Stanford PS310: {e}")
+            raise ValueError(f"Failed to set current limit on Stanford PS310: {e}")
 
     def get_current_limit(self) -> float:
         """
@@ -824,7 +811,7 @@ class StanfordPS310:
             self.loading.delay_with_loading_indicator(_DELAY)
             return float(response.strip())
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to get current limit from Stanford PS310: {e}")
+            raise ValueError(f"Failed to get current limit from Stanford PS310: {e}")
 
     def set_output_state(self, state: bool) -> None:
         """
@@ -845,8 +832,8 @@ class StanfordPS310:
 
         if state and not self._voltage_has_been_set:
             current_setpoint = self.get_voltage()
-            print(
-                _WARNING_STYLE + f"Output voltage has not been set in this session. "
+            _log.warning(
+                f"Output voltage has not been set in this session. "
                 f"Current setpoint: {current_setpoint:.3f} V"
             )
 
@@ -858,7 +845,7 @@ class StanfordPS310:
                 self.loading.delay_with_loading_indicator(_DELAY)
                 self._output_state = True  # Update internal state
                 self._log_interaction("HV output enabled", response="ON")
-                print(f"\r{Fore.GREEN}PS310 High Voltage Output: ON")
+                _log.info("PS310 High Voltage Output: ON")
             else:
                 # HVOF - Turn off the high voltage output (SRS PS310 Programming Manual)
                 self._log_interaction("Disabling HV output", command="HVOF")
@@ -866,10 +853,10 @@ class StanfordPS310:
                 self.loading.delay_with_loading_indicator(_DELAY)
                 self._output_state = False  # Update internal state
                 self._log_interaction("HV output disabled", response="OFF")
-                print(f"\r{Fore.RED}PS310 High Voltage Output: OFF")
+                _log.info("PS310 High Voltage Output: OFF")
         except Exception as e:
             self._log_interaction("Failed to set output state", error=str(e))
-            raise ValueError(_ERROR_STYLE + f"Failed to set output state on Stanford PS310: {e}")
+            raise ValueError(f"Failed to set output state on Stanford PS310: {e}")
 
     def get_output_state(self) -> bool:
         """
@@ -907,7 +894,7 @@ class StanfordPS310:
         except Exception as e:
             # If measurement fails, fall back to cached state
             self._log_interaction("Error checking output state via voltage - using cached value", error=str(e))
-            print(_WARNING_STYLE + f"Could not determine output state from voltage (using cached value): {e}")
+            _log.warning(f"Could not determine output state from voltage (using cached value): {e}")
             return self._output_state
 
     def set_voltage_limit(self, voltage: float) -> None:
@@ -927,11 +914,11 @@ class StanfordPS310:
         self._check_connection()
 
         if not isinstance(voltage, (int, float)):
-            raise ValueError(_ERROR_STYLE + "Invalid voltage limit value. Please provide a numeric value.")
+            raise ValueError("Invalid voltage limit value. Please provide a numeric value.")
 
         if voltage < 0 or voltage > _PS310_MAX_VOLTAGE:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid voltage limit '{voltage}'. "
+                f"Invalid voltage limit '{voltage}'. "
                 f"The PS310 accepts voltage limits between 0 and {_PS310_MAX_VOLTAGE} V."
             )
 
@@ -940,9 +927,9 @@ class StanfordPS310:
             command = f"VLIM {voltage:.3f}"
             self.instrument.write(command)
             self.loading.delay_with_loading_indicator(_DELAY)
-            print(f"\rPS310 voltage limit set to {voltage:.3f} V")
+            _log.info(f"PS310 voltage limit set to {voltage:.3f} V")
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to set voltage limit on Stanford PS310: {e}")
+            raise ValueError(f"Failed to set voltage limit on Stanford PS310: {e}")
 
     def get_voltage_limit(self) -> float:
         """
@@ -965,7 +952,7 @@ class StanfordPS310:
             self.loading.delay_with_loading_indicator(_DELAY)
             return float(response.strip())
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to get voltage limit from Stanford PS310: {e}")
+            raise ValueError(f"Failed to get voltage limit from Stanford PS310: {e}")
 
     def reset(self) -> None:
         """
@@ -985,9 +972,9 @@ class StanfordPS310:
             self.instrument.write("*RST")
             self.loading.delay_with_loading_indicator(_DELAY)
             self._voltage_has_been_set = False
-            print("\rPS310 reset to default settings")
+            _log.info("PS310 reset to default settings")
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to reset Stanford PS310: {e}")
+            raise ValueError(f"Failed to reset Stanford PS310: {e}")
 
     def get_identification(self) -> str:
         """
@@ -1010,7 +997,7 @@ class StanfordPS310:
             self.loading.delay_with_loading_indicator(_DELAY)
             return response.strip()
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to get identification from Stanford PS310: {e}")
+            raise ValueError(f"Failed to get identification from Stanford PS310: {e}")
 
     def clear_status(self) -> None:
         """
@@ -1028,25 +1015,25 @@ class StanfordPS310:
             self.instrument.write("*CLS")
             self.loading.delay_with_loading_indicator(_DELAY)
         except Exception as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to clear status on Stanford PS310: {e}")
+            raise ValueError(f"Failed to clear status on Stanford PS310: {e}")
 
 
 # Test code
 if __name__ == "__main__":
-    print("Stanford PS310 High Voltage Power Supply Test")
-    print("=" * 50)
+    _log.info("Stanford PS310 High Voltage Power Supply Test")
+    _log.info("=" * 50)
 
     try:
         # Create instance (auto-connect)
         hvps = StanfordPS310(auto_connect=False)
-        print("Note: Auto-connect disabled for testing.")
-        print("To test with actual hardware, use: hvps.connect()")
+        _log.info("Note: Auto-connect disabled for testing.")
+        _log.info("To test with actual hardware, use: hvps.connect()")
 
         # Show available methods
-        print("\nAvailable methods:")
+        _log.info("\nAvailable methods:")
         methods = [m for m in dir(hvps) if not m.startswith('_') and callable(getattr(hvps, m))]
         for method in methods:
-            print(f"  - {method}")
+            _log.info(f"  - {method}")
 
     except Exception as e:
-        print(f"Test error: {e}")
+        _log.info(f"Test error: {e}")

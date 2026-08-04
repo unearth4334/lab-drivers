@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lab-drivers"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reusable laboratory equipment drivers for VISA and serial instruments"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,3 +42,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The DM-TP node layer under nodes/ is deliberately NOT packaged here:
+# it is installed by the automation server from the repository, and
+# importing it requires that server's automation_nodes package.

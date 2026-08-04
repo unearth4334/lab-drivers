@@ -233,19 +233,11 @@ import statistics as stats
 from typing import Optional, Tuple, List, Literal
 
 import pyvisa
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.progress import loading
 
-# Optional "loading" helper to mirror your Keysight class UX
-try:
-    from loading import loading
-except Exception:
-    class loading:
-        def delay_with_loading_indicator(self, seconds: float) -> None:
-            time.sleep(seconds)
+_log = get_logger(__name__)
 
-# --- Console styles to match your Keysight code ---
-_ERROR_STYLE   = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
 _DELAY         = 0.1
 
 
@@ -267,7 +259,6 @@ class DMM6500:
     # Init / Connect / Disconnect
     # -----------------------------
     def __init__(self, auto_connect: bool = True, address: Optional[str] = None, ip_address: Optional[str] = None, debug: bool = False):
-        init(autoreset=True)
 
         self.rm = pyvisa.ResourceManager()
         self.address: Optional[str] = None
@@ -309,15 +300,13 @@ class DMM6500:
                     self.address = tcpip_address
                     self._idn = idn
                     self.status = "Connected"
-                    print(_SUCCESS_STYLE + f"Connected to DMM6500 via Ethernet at {ip} [{self._idn}]")
+                    _log.info(f"Connected to DMM6500 via Ethernet at {ip} [{self._idn}]")
                     return
                 else:
                     inst.close()
-                    raise ConnectionError(_ERROR_STYLE +
-                        f"Device at '{ip}' is not a DMM6500 (IDN='{idn}').")
+                    raise ConnectionError(f"Device at '{ip}' is not a DMM6500 (IDN='{idn}').")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE +
-                    f"Failed to connect to DMM6500 at IP '{ip}': {e}")
+                raise ConnectionError(f"Failed to connect to DMM6500 at IP '{ip}': {e}")
         
         # 2) Try explicit address first (argument beats ctor hint)
         explicit = address or self._address_hint
@@ -333,11 +322,9 @@ class DMM6500:
                     self.address = explicit
                 else:
                     inst.close()
-                    raise ConnectionError(_ERROR_STYLE +
-                        f"Resource '{explicit}' is not a DMM6500 (IDN='{idn}').")
+                    raise ConnectionError(f"Resource '{explicit}' is not a DMM6500 (IDN='{idn}').")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE +
-                    f"Failed to open explicit address '{explicit}': {e}")
+                raise ConnectionError(f"Failed to open explicit address '{explicit}': {e}")
 
         # 3) Otherwise scan for resources with '6500' in the name (USB) or TCPIP resources
         # Note: Scans all TCPIP resources for maximum compatibility. Each resource is
@@ -346,46 +333,46 @@ class DMM6500:
         if self.instrument is None:
             resources = self.rm.list_resources()
             if self.debug:
-                print(f"\n[DEBUG] Found {len(resources)} VISA resources:")
+                _log.debug(f"\n[DEBUG] Found {len(resources)} VISA resources:")
                 for r in resources:
-                    print(f"[DEBUG]   - {r}")
+                    _log.debug(f"[DEBUG]   - {r}")
                 print()
             
             for resource in resources:
                 # Check TCPIP resources or USB resources containing '6500'
                 if resource.startswith("TCPIP") or "6500" in resource:
                     if self.debug:
-                        print(f"[DEBUG] Trying resource: {resource}")
+                        _log.debug(f"[DEBUG] Trying resource: {resource}")
                     try:
                         inst = self.rm.open_resource(resource)
                         inst.read_termination = '\n'
                         inst.write_termination = '\n'
                         inst.timeout = 20000
                         if self.debug:
-                            print(f"[DEBUG]   - Opened connection, querying *IDN?...")
+                            _log.debug(f"[DEBUG]   - Opened connection, querying *IDN?...")
                         idn = inst.query("*IDN?").strip()
                         if self.debug:
-                            print(f"[DEBUG]   - Response: {idn}")
+                            _log.debug(f"[DEBUG]   - Response: {idn}")
                         if "DMM6500" in idn:
                             self.instrument = inst
                             self.address = resource
                             if self.debug:
-                                print(f"[DEBUG]   - ✓ Match! Connected to DMM6500")
+                                _log.debug(f"[DEBUG]   - ✓ Match! Connected to DMM6500")
                             break
                         else:
                             if self.debug:
-                                print(f"[DEBUG]   - Not a DMM6500, closing connection")
+                                _log.debug(f"[DEBUG]   - Not a DMM6500, closing connection")
                         inst.close()
                     except Exception as e:
                         if self.debug:
-                            print(f"[DEBUG]   - Error: {e}")
+                            _log.debug(f"[DEBUG]   - Error: {e}")
                         continue
                 else:
                     if self.debug:
-                        print(f"[DEBUG] Skipping resource (doesn't match filter): {resource}")
+                        _log.debug(f"[DEBUG] Skipping resource (doesn't match filter): {resource}")
 
         if self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Keithley DMM6500 not found.")
+            raise ConnectionError("Keithley DMM6500 not found.")
 
         # Clear status and cache ID
         try:
@@ -398,7 +385,7 @@ class DMM6500:
             self._idn = "Keithley DMM6500"
 
         self.status = "Connected"
-        print(_SUCCESS_STYLE + f"Connected to DMM6500 at {self.address} [{self._idn}]")
+        _log.info(f"Connected to DMM6500 at {self.address} [{self._idn}]")
 
     def disconnect(self):
         """Close the VISA session."""
@@ -406,7 +393,7 @@ class DMM6500:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from DMM6500 at {self.address}")
+                _log.info(f"Disconnected from DMM6500 at {self.address}")
         self.status = "Not Connected"
         self.instrument = None
         self.address = None
@@ -416,7 +403,7 @@ class DMM6500:
     # -----------------------------
     def _chk(self):
         if self.status != "Connected" or self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to DMM6500.")
+            raise ConnectionError("Not connected to DMM6500.")
 
     def get_current_function(self) -> str:
         """Return active function (VOLT:DC | CURR:DC | RES | FRES), sans quotes."""
@@ -462,7 +449,7 @@ class DMM6500:
         else:
             node = "RES"
         self.instrument.write(f"SENSe:{node}:RANGe:AUTO OFF")
-        print(f"\rAutorange disabled for {node}.")
+        _log.info(f"Autorange disabled for {node}.")
 
     def set_nplc(self, nplc: float, function: Optional[str] = None) -> None:
         """Set integration time (power-line cycles) for the given/current function."""
@@ -510,8 +497,8 @@ class DMM6500:
             self.instrument.write(f"CONFigure:RESistance {range_val},{resolution_val}")
             self.instrument.write("SENSe:FUNCtion 'RES'")
         else:
-            raise ValueError(_ERROR_STYLE + f"Unsupported measurement_type: {measurement_type}")
-        print(f"\rConfigured {mt} Range={range_val}, Resolution={resolution_val}")
+            raise ValueError(f"Unsupported measurement_type: {measurement_type}")
+        _log.info(f"Configured {mt} Range={range_val}, Resolution={resolution_val}")
 
     # -----------------------------
     # One-shot DC measurements
@@ -545,7 +532,7 @@ class DMM6500:
         elif k == "resistance": return self.measure_resistance(False)
         elif k == "statistics": return self.calculate_statistics()
         else:
-            raise ValueError(_ERROR_STYLE + f"Invalid item: {item} request to DMM6500")
+            raise ValueError(f"Invalid item: {item} request to DMM6500")
 
     # -----------------------------
     # Host-side statistics
@@ -572,7 +559,7 @@ class DMM6500:
             if   mt in ("CURRENT:DC", "CURR:DC"):  return self.measure_current()
             if   mt in ("FRESISTANCE", "FRES"):    return self.measure_resistance(True)
             if   mt in ("RESISTANCE", "RES"):      return self.measure_resistance(False)
-            raise ValueError(_ERROR_STYLE + f"Unsupported measurement_type: {measurement_type}")
+            raise ValueError(f"Unsupported measurement_type: {measurement_type}")
 
         vals: List[float] = []
         for _ in range(max(1, int(n))):
@@ -589,8 +576,8 @@ class DMM6500:
     def fetch_trace(self,
                     buffer: str = "defbuffer1",
                     chunk: int = 50000,
-                    debug: bool = True,
-                    step: bool = True):
+                    debug: bool = False,
+                    step: bool = False):
         """
         Download existing readings (values only) from a DMM buffer (no re-config, no trigger).
         Returns a 2-tuple: (values, None) to be drop-in compatible with code that unpacks
@@ -600,7 +587,9 @@ class DMM6500:
             buffer: buffer name, e.g. 'defbuffer1'
             chunk:  points per TRACe:DATA? fetch (avoid huge single transfers)
             debug:  verbose logging of every SCPI call
-            step:   prompt 'Press Enter to continue...' after each I/O
+            step:   prompt 'Press Enter to continue...' after each I/O. Defaults
+                to False: a prompt here blocks any unattended caller forever,
+                and is only ever useful while debugging by hand.
 
         Returns:
             (values, None)  # times are not available on this unit
@@ -621,26 +610,26 @@ class DMM6500:
             except Exception:
                 pass
 
-        def _log(msg: str):
+        def _trace(msg: str):
             if debug:
-                print(f"[{_now()}] {msg}")
+                _log.debug(f"[{_now()}] {msg}")
 
         def _write(cmd: str):
-            _log(f"WRITE: {cmd}")
+            _trace(f"WRITE: {cmd}")
             inst.write(cmd)
             _pause(f"Wrote: {cmd}")
 
         def _query(cmd: str) -> str:
-            _log(f"QUERY: {cmd}")
+            _trace(f"QUERY: {cmd}")
             rsp = inst.query(cmd).strip()
-            _log(f"  -> '{rsp}'")
+            _trace(f"  -> '{rsp}'")
             _pause(f"Query: {cmd}")
             return rsp
 
         def _query_ascii(cmd: str):
-            _log(f"QUERY_ASCII: {cmd}")
+            _trace(f"QUERY_ASCII: {cmd}")
             vals = inst.query_ascii_values(cmd, container=list)
-            _log(f"  -> {len(vals)} numbers")
+            _trace(f"  -> {len(vals)} numbers")
             _pause(f"Query ASCII: {cmd}")
             return vals
 
@@ -649,12 +638,12 @@ class DMM6500:
         try:
             n = int(_query(f"TRACe:ACTual? '{buffer}'"))
         except Exception as e1:
-            _log(f"ACTual? with quoted buffer failed ({e1}); trying unquoted…")
+            _trace(f"ACTual? with quoted buffer failed ({e1}); trying unquoted…")
             n = int(_query(f"TRACe:ACTual? {buffer}"))
 
-        _log(f"BUFFER COUNT: {n}")
+        _trace(f"BUFFER COUNT: {n}")
         if n <= 0:
-            _log("No points in buffer; returning empty lists.")
+            _trace("No points in buffer; returning empty lists.")
             return [], None
 
         # -------- read in chunks --------
@@ -670,17 +659,17 @@ class DMM6500:
             try:
                 raw = _query_ascii(cmd_q)
             except Exception as e_q:
-                _log(f"DATA? quoted failed ({e_q}); trying unquoted…")
+                _trace(f"DATA? quoted failed ({e_q}); trying unquoted…")
                 raw = _query_ascii(cmd_uq)
 
             values.extend(float(v) for v in raw)
-            _log(f"CHUNK [{start}:{stop}] -> {len(raw)} values "
+            _trace(f"CHUNK [{start}:{stop}] -> {len(raw)} values "
                 f"(total {len(values)} of {n})")
             if raw:
-                _log(f"  first={raw[0]:.6g}, last={raw[-1]:.6g}")
+                _trace(f"  first={raw[0]:.6g}, last={raw[-1]:.6g}")
 
             start = stop + 1
 
-        _log(f"DONE: fetched {len(values)} values from '{buffer}'.")
+        _trace(f"DONE: fetched {len(values)} values from '{buffer}'.")
         # Return (values, None) so callers that unpack (vals, times) keep working.
         return values, None

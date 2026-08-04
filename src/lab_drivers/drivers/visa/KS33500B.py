@@ -211,25 +211,10 @@ import time
 from typing import Optional
 
 import pyvisa
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.progress import loading
 
-
-# Loading module with fallback
-try:
-    from .loading import loading
-except ImportError:
-    try:
-        from loading import loading
-    except ImportError:
-        class loading:
-            """Fallback loading class if module unavailable."""
-            def delay_with_loading_indicator(self, seconds: float) -> None:
-                time.sleep(seconds)
-
-# Console output styles
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
+_log = get_logger(__name__)
 
 _DELAY = 0.1
 
@@ -249,7 +234,6 @@ class KS33500B:
             address: Optional explicit VISA address
             debug: Enable debug printing (default: False)
         """
-        init(autoreset=True)
         
         self.rm: Optional[pyvisa.ResourceManager] = pyvisa.ResourceManager()
         self.address: Optional[str] = None
@@ -293,28 +277,28 @@ class KS33500B:
                 if "33500B" not in idn:
                     inst.close()
                     raise ConnectionError(
-                        _ERROR_STYLE + f"Device at '{explicit}' is not a KS33500B (IDN='{idn}')."
+                        f"Device at '{explicit}' is not a KS33500B (IDN='{idn}')."
                     )
                 
                 self.instrument = inst
                 self.address = explicit
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"Failed to connect to '{explicit}': {e}")
+                raise ConnectionError(f"Failed to connect to '{explicit}': {e}")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to '{explicit}': {e}")
+                raise ConnectionError(f"Unexpected error connecting to '{explicit}': {e}")
         
         # 2) Auto-detect by scanning resources
         if self.instrument is None:
             try:
                 resources = self.rm.list_resources()
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"PyVISA is not able to find any devices: {e}")
+                raise ConnectionError(f"PyVISA is not able to find any devices: {e}")
             
             # Look for MY52 (typical Keysight 33500B identifier)
             ks_resources = [elem for elem in resources if 'MY52' in elem]
             
             if len(ks_resources) == 0:
-                raise ConnectionError(_ERROR_STYLE + "KS33500B not found")
+                raise ConnectionError("KS33500B not found")
             
             try:
                 self.address = ks_resources[0]
@@ -324,16 +308,16 @@ class KS33500B:
                 inst.timeout = 20000
                 self.instrument = inst
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"Failed to connect to auto-detected device: {e}")
+                raise ConnectionError(f"Failed to connect to auto-detected device: {e}")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE + f"Unexpected error during auto-detection: {e}")
+                raise ConnectionError(f"Unexpected error during auto-detection: {e}")
         
         # 3) Initialize device
         if self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Failed to establish connection to KS33500B")
+            raise ConnectionError("Failed to establish connection to KS33500B")
         
         self.status = "Connected"
-        print(_SUCCESS_STYLE + f"Connected to {self.address}")
+        _log.info(f"Connected to {self.address}")
     
     def disconnect(self) -> None:
         """
@@ -349,7 +333,7 @@ class KS33500B:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from KS33500B at {self.address}")
+                _log.info(f"Disconnected from KS33500B at {self.address}")
                 self.instrument = None
         
         self.status = "Not Connected"
@@ -358,7 +342,7 @@ class KS33500B:
     def _chk(self) -> None:
         """Verify device is connected before operations."""
         if self.status != "Connected" or self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to KS33500B")
+            raise ConnectionError("Not connected to KS33500B")
 
     def set_squ_dcyc(self, dcyc: float, source: int = 1) -> None:
         """
@@ -381,7 +365,7 @@ class KS33500B:
         
         command = f'SOUR{source}:FUNC:SQU:DCYC {dcyc}'
         if self.debug:
-            print(command)
+            _log.info(command)
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
 
@@ -406,7 +390,7 @@ class KS33500B:
         
         command = f'SOUR{source}:FREQ {freq} Hz'
         if self.debug:
-            print(command)
+            _log.info(command)
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
 
@@ -431,7 +415,7 @@ class KS33500B:
         
         command = f'SOUR{source}:VOLT {amp} Vpp'
         if self.debug:
-            print(command)
+            _log.info(command)
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
 
@@ -456,7 +440,7 @@ class KS33500B:
         
         command = f'SOUR{source}:VOLT:OFFS {offset} V'
         if self.debug:
-            print(command)
+            _log.info(command)
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
 

@@ -282,12 +282,11 @@ from __future__ import annotations
 from typing import Optional, Any, Dict, List, Tuple
 
 import pyvisa
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+
+_log = get_logger(__name__)
 
 
-_ERROR_STYLE   = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 
 class KeysightMSOX4154A:
     """Keysight MSOX4154A mixed-signal oscilloscope driver.
@@ -297,7 +296,6 @@ class KeysightMSOX4154A:
     """
 
     def __init__(self, auto_connect: bool = True, timeout_ms: int = 20000, chunk_size: int = 102_400):
-        init(autoreset=True)
         self.rm: pyvisa.ResourceManager = pyvisa.ResourceManager()
         self.address: Optional[str] = None
         self.instrument: Optional[pyvisa.resources.MessageBasedResource] = None
@@ -329,7 +327,7 @@ class KeysightMSOX4154A:
                             self.instrument = inst
                             self.address = resource
                             self.status = "Connected"
-                            print(_SUCCESS_STYLE + f"Auto-connected to Keysight MSOX4154A at {resource}")
+                            _log.info(f"Auto-connected to Keysight MSOX4154A at {resource}")
                             return
                         else:
                             inst.close()
@@ -341,7 +339,7 @@ class KeysightMSOX4154A:
                         continue
             raise ConnectionError("No Keysight MSOX4154A oscilloscope found")
         except Exception as e:
-            print(_ERROR_STYLE + f"Auto-connect failed: {e}")
+            _log.error(f"Auto-connect failed: {e}")
             raise
 
     def connect(self, address: Optional[str] = None):
@@ -349,7 +347,7 @@ class KeysightMSOX4154A:
         if address is not None:
             # Connect to specific address
             if "::INSTR" not in address:
-                raise ValueError(_ERROR_STYLE + f"Not a VISA INSTR address: {address}")
+                raise ValueError(f"Not a VISA INSTR address: {address}")
             try:
                 inst = self.rm.open_resource(address)
                 inst.timeout = self._timeout_ms
@@ -363,9 +361,9 @@ class KeysightMSOX4154A:
                 self.instrument = inst
                 self.address = address
                 self.status = "Connected"
-                print(_SUCCESS_STYLE + f"Connected to Keysight MSOX4154A Oscilloscope at {self.address}")
+                _log.info(f"Connected to Keysight MSOX4154A Oscilloscope at {self.address}")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE + f"Failed to open {address}: {e}")
+                raise ConnectionError(f"Failed to open {address}: {e}")
         else:
             # Auto-connect
             self._auto_connect()
@@ -375,7 +373,7 @@ class KeysightMSOX4154A:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from Keysight MSOX4154A Oscilloscope at {self.address}")
+                _log.info(f"Disconnected from Keysight MSOX4154A Oscilloscope at {self.address}")
                 self.instrument = None
                 self.status = "Not Connected"
                 self.address = None
@@ -383,7 +381,7 @@ class KeysightMSOX4154A:
     # ---------- Helpers ----------
     def _chk(self):
         if self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected.")
+            raise ConnectionError("Not connected.")
 
     def get_idn(self) -> str:
         self._chk()
@@ -405,7 +403,7 @@ class KeysightMSOX4154A:
         self._chk()
         try: 
             self.instrument.write(":RUN")  # type: ignore
-            print(_SUCCESS_STYLE + "Oscilloscope acquisition started")
+            _log.info("Oscilloscope acquisition started")
         except Exception: pass
 
     def save_screenshot(self, filename: str, inksaver: bool = False) -> bool:
@@ -439,10 +437,10 @@ class KeysightMSOX4154A:
             screenshot_data = self.get_screenshot(inksaver=inksaver)
             with open(filename, 'wb') as f:
                 f.write(screenshot_data)
-            print(_SUCCESS_STYLE + f"Screenshot saved: {filename}")
+            _log.info(f"Screenshot saved: {filename}")
             return True
         except Exception as e:
-            print(_ERROR_STYLE + f"Screenshot failed: {e}")
+            _log.error(f"Screenshot failed: {e}")
             return False
 
     # ---------- Screenshot ----------
@@ -486,9 +484,9 @@ class KeysightMSOX4154A:
             )
             return bytes(data)
         except pyvisa.errors.VisaIOError as e:
-            raise RuntimeError(_ERROR_STYLE + f"Screenshot failed: {e}")
+            raise RuntimeError(f"Screenshot failed: {e}")
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Screenshot failed: {e}")
+            raise RuntimeError(f"Screenshot failed: {e}")
 
     # ---------- Waveform: scaled data with real timebase ----------
     def _read_preamble(self) -> Dict[str, float]:
@@ -502,7 +500,7 @@ class KeysightMSOX4154A:
         # 0:FORMAT, 1:TYPE, 2:POINTS, 3:COUNT, 4:XINCR, 5:XORIG, 6:XREF, 7:YINCR, 8:YORIG, 9:YREF
         parts = [p.strip() for p in pre.split(",")]
         if len(parts) < 10:
-            raise RuntimeError(_ERROR_STYLE + f"Unexpected preamble: {pre}")
+            raise RuntimeError(f"Unexpected preamble: {pre}")
         return {
             "format": float(parts[0]),
             "type":   float(parts[1]),
@@ -561,7 +559,7 @@ class KeysightMSOX4154A:
 
         n = len(raw)
         if debug:
-            print(f"[{source}] points={n}, xincr={xincr} s, Fs={sample_rate} Hz")
+            _log.info(f"[{source}] points={n}, xincr={xincr} s, Fs={sample_rate} Hz")
 
         # Convert to time and volts
         t = [xorig + i * xincr for i in range(n)]
@@ -599,10 +597,10 @@ class KeysightMSOX4154A:
             inst.write(":MEASure:STATistics ON")
             inst.write(":MEASure:STATistics:DISPlay ON")
             
-            print(_SUCCESS_STYLE + f"Configured measurements for {channel}")
+            _log.info(f"Configured measurements for {channel}")
             
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Failed to setup measurements: {e}")
+            raise RuntimeError(f"Failed to setup measurements: {e}")
 
     def clear_measurement_statistics(self):
         """Clear measurement statistics counters."""
@@ -611,9 +609,9 @@ class KeysightMSOX4154A:
         
         try:
             inst.write(":MEASure:STATistics:RESet")
-            print(_SUCCESS_STYLE + "Measurement statistics cleared")
+            _log.info("Measurement statistics cleared")
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to clear statistics: {e}")
+            _log.error(f"Failed to clear statistics: {e}")
 
     def get_measurement_count(self) -> int:
         """
@@ -629,7 +627,7 @@ class KeysightMSOX4154A:
             result = inst.query(":MEASure:STATistics:COUNt?").strip()
             return int(float(result))
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to get measurement count: {e}")
+            _log.error(f"Failed to get measurement count: {e}")
             return 0
 
     def list_configured_measurements(self) -> list:
@@ -673,7 +671,7 @@ class KeysightMSOX4154A:
             return measurements
             
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to list measurements: {e}")
+            _log.error(f"Failed to list measurements: {e}")
             return []
 
     def get_measurement_results(self) -> Dict[str, Any]:
@@ -702,7 +700,7 @@ class KeysightMSOX4154A:
             raw_response = inst.query(":MEASure:RESults?").strip()
             
             if not raw_response:
-                print("No measurement results available (empty response)")
+                _log.info("No measurement results available (empty response)")
                 return {
                     'raw_response': '',
                     'parsed_results': [],
@@ -729,7 +727,7 @@ class KeysightMSOX4154A:
                             }
                             parsed_results.append(result)
                         except (ValueError, IndexError) as e:
-                            print(_WARNING_STYLE + f"Failed to parse measurement {i//7 + 1}: {e}")
+                            _log.warning(f"Failed to parse measurement {i//7 + 1}: {e}")
             else:
                 # Single statistic mode - each value corresponds to one measurement
                 # We don't know the labels in this mode, so use generic names
@@ -741,9 +739,9 @@ class KeysightMSOX4154A:
                             'statistic_type': stats_mode
                         })
                     except ValueError as e:
-                        print(_WARNING_STYLE + f"Failed to parse value {i+1}: {e}")
+                        _log.warning(f"Failed to parse value {i+1}: {e}")
             
-            print(_SUCCESS_STYLE + f"Retrieved {len(parsed_results)} measurement results")
+            _log.info(f"Retrieved {len(parsed_results)} measurement results")
             
             return {
                 'raw_response': raw_response,
@@ -752,7 +750,7 @@ class KeysightMSOX4154A:
             }
             
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to get measurement results: {e}")
+            _log.error(f"Failed to get measurement results: {e}")
             return {
                 'raw_response': '',
                 'parsed_results': [],
@@ -778,14 +776,14 @@ class KeysightMSOX4154A:
             if stat_state == "0" or stat_state.upper() == "OFF":
                 # Turn on statistics
                 inst.write(":MEASure:STATistics ON")
-                print("Enabled measurement statistics")
+                _log.info("Enabled measurement statistics")
             
             # Get count first to check if any measurements exist
             count = inst.query(f":MEASure:STATistics:COUNt?").strip()
             count_val = float(count) if count else 0
             
             if count_val == 0:
-                print(f"No statistics available for {parameter} (count = 0)")
+                _log.info(f"No statistics available for {parameter} (count = 0)")
                 return {
                     "current": float('nan'),
                     "minimum": float('nan'),
@@ -826,11 +824,11 @@ class KeysightMSOX4154A:
                 "count": count_val
             }
             
-            print(f"Successfully got {parameter} statistics: {count_val} measurements")
+            _log.info(f"Successfully got {parameter} statistics: {count_val} measurements")
             return result
             
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to get statistics for {parameter}: {e}")
+            _log.error(f"Failed to get statistics for {parameter}: {e}")
             return {
                 "current": float('nan'),
                 "minimum": float('nan'),
@@ -867,7 +865,7 @@ class KeysightMSOX4154A:
                 return float(result)
                 
         except Exception as e:
-            print(_ERROR_STYLE + f"Measurement {parameter} failed: {e}")
+            _log.error(f"Measurement {parameter} failed: {e}")
             return float('nan')
 
     def get_xat_max(self, channel: str = "CHAN1") -> float:
@@ -894,7 +892,7 @@ class KeysightMSOX4154A:
                 return float(result)
                 
         except Exception as e:
-            print(_ERROR_STYLE + f"X@Max measurement failed: {e}")
+            _log.error(f"X@Max measurement failed: {e}")
             return float('nan')
 
     def get_full_screen_average(self, channel: str = "CHAN1") -> float:
@@ -931,7 +929,7 @@ class KeysightMSOX4154A:
                 measurements[param] = self.get_measurement(param, channel)
                 
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Voltage measurement error: {e}")
+            raise RuntimeError(f"Voltage measurement error: {e}")
             
         return measurements
 
@@ -957,7 +955,7 @@ class KeysightMSOX4154A:
                 measurements[param] = self.get_measurement(param, channel)
                 
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Timing measurement error: {e}")
+            raise RuntimeError(f"Timing measurement error: {e}")
             
         return measurements
 
@@ -1078,7 +1076,7 @@ class KeysightMSOX4154A:
                 return self.get_measurement(item.upper(), channel_str)
                 
         except Exception as e:
-            print(_ERROR_STYLE + f"Measurement '{item}' failed: {e}")
+            _log.error(f"Measurement '{item}' failed: {e}")
             return float('nan')
 
     # ---------- Wave Generator Control ----------
@@ -1106,9 +1104,9 @@ class KeysightMSOX4154A:
         
         try:
             inst.write(f":WGEN2:VOLTage:OFFSet {offset}")
-            print(_SUCCESS_STYLE + f"Wave generator offset set to {offset}V")
+            _log.info(f"Wave generator offset set to {offset}V")
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Failed to set wave generator offset: {e}")
+            raise RuntimeError(f"Failed to set wave generator offset: {e}")
         
 
     # ---------- Wave Generator Control ----------
@@ -1136,9 +1134,9 @@ class KeysightMSOX4154A:
         
         try:
             inst.write(f":WGEN:VOLTage:OFFSet {offset}")
-            print(_SUCCESS_STYLE + f"Wave generator offset set to {offset}V")
+            _log.info(f"Wave generator offset set to {offset}V")
         except Exception as e:
-            raise RuntimeError(_ERROR_STYLE + f"Failed to set wave generator offset: {e}")
+            raise RuntimeError(f"Failed to set wave generator offset: {e}")
 
     def get_oscilloscope_config(self) -> Dict[str, str]:
         """
@@ -1197,5 +1195,5 @@ class KeysightMSOX4154A:
             return config
             
         except Exception as e:
-            print(_ERROR_STYLE + f"Failed to get oscilloscope config: {e}")
+            _log.error(f"Failed to get oscilloscope config: {e}")
             return {}

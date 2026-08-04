@@ -98,21 +98,15 @@ import statistics
 import numpy
 import serial.tools.list_ports
 import os
-try:
-    from .loading import *
-except:
-    from loading import *
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.ports import resolve_address as _resolve_address, select_port
+from lab_drivers.core.progress import loading
 
-from colorama import init, Fore, Back, Style
-
-
+_log = get_logger(__name__)
 
 # Constants and global variables
 _MAX_FILENAMES = 100
 _VALUE_PADDING = 40
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 _DELAY = 0.05
 _CONNECTION_TIMEOUT = 1
 
@@ -127,84 +121,83 @@ class U1233A:
         - "MEAS_AVG": averaged tuple `(mean, stdev)`
     """
 
-    def __init__(self,auto_connect=True, baud_rate=9600,com_port=None):
+    def __init__(self, auto_connect=True, baud_rate=9600, address=None, *,
+                 com_port=None, interactive=None):
         """Initialize the driver and optionally connect.
 
         Args:
             auto_connect: Connect during initialization when True.
             baud_rate: Serial baud rate.
-            com_port: Optional explicit serial port.
+            address: Optional explicit serial port.
+            com_port: Deprecated alias for ``address``.
+            interactive: Whether a missing port may be resolved by prompting.
+                ``None`` prompts only when stdin is a terminal.
         """
+        address = _resolve_address(address, com_port)
 
-        init(autoreset=True)
         self.status = "Not Connected"
         self.ser = None
         self.identity = None
-        self.loading = loading()
+        self.loading = loading(interactive)
 
-        self.com_port = com_port
+        self.com_port = address
+        self._interactive = interactive
 
         if auto_connect:
-            self.connect(baud_rate, com_port)
-        
-    def connect(self,baud_rate=9600,com_port=None, prompt_on_fail: bool = True):
+            self.connect(baud_rate, address)
+
+    def connect(self, baud_rate=9600, address=None, prompt_on_fail: bool = True, *,
+                com_port=None, interactive=None):
         """Connect to the instrument over serial.
 
         Args:
             baud_rate: Serial baud rate.
-            com_port: Optional explicit serial port.
-            prompt_on_fail: Prompt for manual port selection when auto-connect fails.
+            address: Optional explicit serial port. When omitted,
+                ``U1233A_COM_PORT_ENV_VAR`` is consulted.
+            prompt_on_fail: Offer manual port selection when the first attempt
+                fails. Only takes effect where prompting is possible at all.
+            com_port: Deprecated alias for ``address``.
+            interactive: Override the prompting decision for this call.
 
         Returns:
             Active serial handle.
-        """
 
+        Raises:
+            ConnectionError: Connection failed, or a port was needed but this
+                process cannot prompt for one.
+        """
+        address = _resolve_address(address, com_port) or self.com_port
+        allow_prompt = self._interactive if interactive is None else interactive
+
+        port = None
         try:
-            if com_port is None:
-                com_port = os.environ['U1233A_COM_PORT_ENV_VAR']
-            self.ser = serial.Serial(com_port,baud_rate,timeout=_CONNECTION_TIMEOUT)
+            # First attempt: whatever was supplied, without ever prompting.
+            port = select_port("U1233A", port=address,
+                               env_var="U1233A_COM_PORT_ENV_VAR", interactive=False)
+            self.ser = serial.Serial(port, baud_rate, timeout=_CONNECTION_TIMEOUT)
             self.status = "Connected"
         except Exception:
             if not prompt_on_fail:
-                error_message = f"Failed to connect to U1233A on COM port {com_port}."
-                raise ConnectionError(_ERROR_STYLE + error_message)
-            ports = serial.tools.list_ports.comports()
-            if not ports:
-                error_message = "No COM ports found."
-                raise ConnectionError(_ERROR_STYLE + error_message)
-
-            print("Available COM ports:")
-            for i, port in enumerate(ports, start=1):
-                print(f"{i}. {port.device} - {port.description}")
-
-            while True:
-                try:
-                    selection = int(self.loading.input_with_flashing("Select a COM port (1, 2, ...): "))
-                    
-                    if 1 <= selection <= len(ports):
-                        com_port = ports[selection - 1].device
-                        os.environ['U1233A_COM_PORT_ENV_VAR']= str(com_port)
-                        break
-                    else:
-                        print(_ERROR_STYLE + "Error! Invalid selection.")
-                except ValueError:
-                    error_message = "Invalid input. Please enter a number."
-                    print(_ERROR_STYLE + error_message)
-
+                raise ConnectionError(
+                    f"Failed to connect to U1233A on COM port {port or address}.")
+            # select_port raises rather than blocking when nobody can answer.
+            port = select_port("U1233A", env_var="U1233A_COM_PORT_ENV_VAR",
+                               interactive=allow_prompt)
             try:
-                self.ser = serial.Serial(com_port,baud_rate,timeout=_CONNECTION_TIMEOUT)
+                self.ser = serial.Serial(port, baud_rate, timeout=_CONNECTION_TIMEOUT)
                 self.status = "Connected"
-            except:
-                error_message = f"Failed to connect to U1233A on COM port {com_port}."
-                raise ConnectionError(_ERROR_STYLE + error_message)
-            
+            except Exception as ex:
+                raise ConnectionError(
+                    f"Failed to connect to U1233A on COM port {port}.") from ex
+
+        com_port = port
         self.ser.write(str('*IDN?\n').encode('ascii'))
         self.loading.delay_with_loading_indicator(_DELAY)
         self.identity = self.ser.readline().decode('ascii').strip()
         if len(self.identity) < 5:
             error_message = f"Failed to connect to U1233A on COM port {com_port}. Check that the device is connected and powered on."
-            raise ConnectionError(_ERROR_STYLE + error_message)
-        print(_SUCCESS_STYLE + f"Connected to {self.identity} on COM port {com_port}.")
+            raise ConnectionError(error_message)
+        _log.info(f"Connected to {self.identity} on COM port {com_port}.")
         return self.ser
 
     def get(self,item,channel=1):
@@ -249,11 +242,11 @@ class U1233A:
         """Close the serial connection."""
         if self.ser.isOpen():
             self.ser.close()
-            print("Disconnected from {self.identity} on COM port {self.com_port}.")
+            _log.info("Disconnected from {self.identity} on COM port {self.com_port}.")
 
 # Test code
 if __name__ == "__main__":
     multimeter = U1233A()
-    print(f"Measurement: {multimeter.get('MEAS')}")
-    print(f"Average measurement: {multimeter.get('MEAS_AVG')}")
+    _log.info(f"Measurement: {multimeter.get('MEAS')}")
+    _log.info(f"Average measurement: {multimeter.get('MEAS_AVG')}")
     multimeter.disconnect()

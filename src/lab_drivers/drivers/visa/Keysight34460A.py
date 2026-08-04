@@ -195,16 +195,13 @@ See Also
 """
 
 import pyvisa
-from colorama import init, Fore, Style
-try:
-    from .loading import *
-except:
-    from loading import *
+from lab_drivers.core.log import get_logger
 
+from lab_drivers.core.progress import loading
+
+_log = get_logger(__name__)
 
 # Constants and global variables
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT  + "\r"
 _DELAY = 0.1
 
 """
@@ -226,51 +223,66 @@ class Keysight34460A:
         - "statistics"
     """
 
-    def __init__(self, auto_connect=True):
-        """Initialize the driver and optionally connect."""
-        
-        init(autoreset=True)
+    def __init__(self, auto_connect=True, address=None):
+        """Initialize the driver and optionally connect.
+
+        Args:
+            auto_connect: Connect during initialization when True.
+            address: Optional explicit VISA resource string. When omitted, the
+                bus is scanned for a matching instrument.
+        """
 
         self.rm = pyvisa.ResourceManager()
         self.address = None
         self.instrument = None
         self.loading = loading()
+        self._address_hint = address
 
         self.status = "Not Connected"
-        
+
         if auto_connect:
-            self.connect()
-        
-    def connect(self):
-        """Connect to the first VISA resource matching the 34460A identity."""
-        
-        resources = self.rm.list_resources()
-        for resource in resources:
-            if 'MY59' in resource:
-                self.address = resource
-                break
-        
+            self.connect(address=address)
+
+    def connect(self, address=None):
+        """Connect to the 34460A, by explicit address or by scanning the bus.
+
+        Args:
+            address: Optional explicit VISA resource string.
+
+        Raises:
+            ConnectionError: The instrument was not found, or opening it failed.
+        """
+        explicit = address or self._address_hint
+        if explicit:
+            self.address = explicit
+        else:
+            resources = self.rm.list_resources()
+            for resource in resources:
+                if 'MY59' in resource:
+                    self.address = resource
+                    break
+
         if self.address is None:
             error_message = "Keysight 34460A Multimeter not found."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         try:
             self.instrument = self.rm.open_resource(self.address)
             self.instrument.read_termination = '\n'
             self.status = "Connected"
             success_message = f"Connected to Keysight 34460A Multimeter at {self.address}"
-            print(_SUCCESS_STYLE + success_message)
+            _log.info(success_message)
 
-        except:
+        except Exception as e:
             error_message = f"Failed to connect to Keysight 34460A Multimeter at {self.address}: {e}"
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message) from e
 
     def disconnect(self):
         """Disconnect from the instrument and close the VISA session."""
         
         if self.instrument is not None:
             self.instrument.close()
-            print(f"\rDisconnected from Keysight 34460A Multimeter at {self.address}")
+            _log.info(f"Disconnected from Keysight 34460A Multimeter at {self.address}")
             self.status = "Not Connected"
 
     def get(self, item):
@@ -291,7 +303,7 @@ class Keysight34460A:
             return result
         else:
             error_message = f"Invalid item: {item} request to Keysight 34460A Multimeter"
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
     """
     Reads and returns the voltage measurement.
@@ -310,7 +322,7 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
 
         self.instrument.write("MEASURE:VOLTAGE:DC?")
@@ -336,7 +348,7 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         self.instrument.write("MEASURE:CURRENT:DC?")
         self.loading.delay_with_loading_indicator(_DELAY)
@@ -356,7 +368,7 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         self.instrument.write("FUNCtion?")
         self.loading.delay_with_loading_indicator(_DELAY)
@@ -380,14 +392,14 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if function is None:
             function = self.get_current_function()
 
         self.instrument.write(f"{function}:RANGE:AUTO OFF")
         self.loading.delay_with_loading_indicator(_DELAY)
-        print(f"\rAutorange disabled for {function} function")
+        _log.info(f"Autorange disabled for {function} function")
 
 
     """
@@ -429,12 +441,12 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         command = f"CONFIGURE:{measurement_type} {range_val},{resolution_val}"
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
-        print(f"\rConfiguration set for {measurement_type}: Range={range_val}, Resolution={resolution_val} on Keysight 34460A Multimeter.")
+        _log.info(f"Configuration set for {measurement_type}: Range={range_val}, Resolution={resolution_val} on Keysight 34460A Multimeter.")
 
 
     """
@@ -453,7 +465,7 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
 
         # Enable statistics
@@ -465,7 +477,7 @@ class Keysight34460A:
         # Initiate the measurement
         self.instrument.write("INIT")
         self.loading.delay_with_loading_indicator(_DELAY)
-        print(f"\rMeasurement of {n} readings started on Keysight 34460A Multimeter.")
+        _log.info(f"Measurement of {n} readings started on Keysight 34460A Multimeter.")
 
 
     """
@@ -485,7 +497,7 @@ class Keysight34460A:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         self.instrument.write("CALCulate:AVERage:ALL?")
         self.loading.delay_with_loading_indicator(_DELAY)

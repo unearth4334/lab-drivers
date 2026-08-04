@@ -255,20 +255,11 @@ import json
 from typing import Optional, List
 
 import pyvisa
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.progress import loading
 
-# Optional "loading" helper
-try:
-    from loading import loading
-except Exception:
-    class loading:
-        def delay_with_loading_indicator(self, seconds: float) -> None:
-            time.sleep(seconds)
+_log = get_logger(__name__)
 
-# --- Console styles to match DMM6500 ---
-_ERROR_STYLE   = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\r"
 _DELAY         = 0.1
 
 # Cache file for storing last successful connection
@@ -297,7 +288,6 @@ class RSA3030:
             ip_address: IP address for Ethernet connection (e.g., "192.168.1.100").
             debug: Enable debug output showing resource scanning details.
         """
-        init(autoreset=True)
 
         self.rm = pyvisa.ResourceManager()
         self.address: Optional[str] = None
@@ -347,17 +337,15 @@ class RSA3030:
                     self.address = tcpip_address
                     self._idn = idn
                     self.status = "Connected"
-                    print(_SUCCESS_STYLE + f"Connected to RSA3030 via Ethernet at {ip} [{self._idn}]")
+                    _log.info(f"Connected to RSA3030 via Ethernet at {ip} [{self._idn}]")
                     # Save successful address to cache
                     self._save_last_address(tcpip_address)
                     return
                 else:
                     inst.close()
-                    raise ConnectionError(_ERROR_STYLE +
-                        f"Device at '{ip}' is not an RSA3030 (IDN='{idn}').")
+                    raise ConnectionError(f"Device at '{ip}' is not an RSA3030 (IDN='{idn}').")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE +
-                    f"Failed to connect to RSA3030 at IP '{ip}': {e}")
+                raise ConnectionError(f"Failed to connect to RSA3030 at IP '{ip}': {e}")
         
         # 2) Try explicit address first (argument beats ctor hint)
         explicit = address or self._address_hint
@@ -373,24 +361,22 @@ class RSA3030:
                     self.address = explicit
                     self._idn = idn
                     self.status = "Connected"
-                    print(_SUCCESS_STYLE + f"Connected to RSA3030 at {explicit} [{self._idn}]")
+                    _log.info(f"Connected to RSA3030 at {explicit} [{self._idn}]")
                     # Save successful address to cache
                     self._save_last_address(explicit)
                     return
                 else:
                     inst.close()
-                    raise ConnectionError(_ERROR_STYLE +
-                        f"Resource '{explicit}' is not an RSA3030 (IDN='{idn}').")
+                    raise ConnectionError(f"Resource '{explicit}' is not an RSA3030 (IDN='{idn}').")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE +
-                    f"Failed to open explicit address '{explicit}': {e}")
+                raise ConnectionError(f"Failed to open explicit address '{explicit}': {e}")
 
         # 2.5) Try cached address from previous successful connection
         if self.instrument is None:
             cached_address = self._load_last_address()
             if cached_address:
                 if self.debug:
-                    print(f"[DEBUG] Trying cached address: {cached_address}")
+                    _log.debug(f"[DEBUG] Trying cached address: {cached_address}")
                 try:
                     inst = self.rm.open_resource(cached_address)
                     inst.read_termination = '\n'
@@ -403,14 +389,14 @@ class RSA3030:
                         self._idn = idn
                         self.status = "Connected"
                         if self.debug:
-                            print(f"[DEBUG]   - ✓ Connected via cached address!")
-                        print(_SUCCESS_STYLE + f"Connected to RSA3030 at {self.address} [{self._idn}]")
+                            _log.debug(f"[DEBUG]   - ✓ Connected via cached address!")
+                        _log.info(f"Connected to RSA3030 at {self.address} [{self._idn}]")
                         return
                     else:
                         inst.close()
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG]   - Cached address failed: {e}")
+                        _log.debug(f"[DEBUG]   - Cached address failed: {e}")
                     # Continue to full scan if cached address doesn't work
                     pass
 
@@ -421,59 +407,59 @@ class RSA3030:
         if self.instrument is None:
             resources = self.rm.list_resources()
             if self.debug:
-                print(f"\n[DEBUG] Found {len(resources)} VISA resources:")
+                _log.debug(f"\n[DEBUG] Found {len(resources)} VISA resources:")
                 for r in resources:
-                    print(f"[DEBUG]   - {r}")
+                    _log.debug(f"[DEBUG]   - {r}")
                 print()
             
             for resource in resources:
                 # Check TCPIP resources or USB resources containing 'RSA' or Rigol vendor ID
                 if resource.startswith("TCPIP") or "RSA" in resource.upper() or "0x1AB1" in resource.upper():
                     if self.debug:
-                        print(f"[DEBUG] Trying resource: {resource}")
+                        _log.debug(f"[DEBUG] Trying resource: {resource}")
                     try:
                         inst = self.rm.open_resource(resource)
                         inst.read_termination = '\n'
                         inst.write_termination = '\n'
                         inst.timeout = 20000
                         if self.debug:
-                            print(f"[DEBUG]   - Opened connection, querying *IDN?...")
+                            _log.debug(f"[DEBUG]   - Opened connection, querying *IDN?...")
                         idn = inst.query("*IDN?").strip()
                         if self.debug:
-                            print(f"[DEBUG]   - Response: {idn}")
+                            _log.debug(f"[DEBUG]   - Response: {idn}")
                         if "RSA" in idn.upper() or "RIGOL" in idn.upper():
                             self.instrument = inst
                             self.address = resource
                             self._idn = idn
                             self.status = "Connected"
                             if self.debug:
-                                print(f"[DEBUG]   - ✓ Match! Connected to RSA3030")
-                            print(_SUCCESS_STYLE + f"Connected to RSA3030 at {self.address} [{self._idn}]")
+                                _log.debug(f"[DEBUG]   - ✓ Match! Connected to RSA3030")
+                            _log.info(f"Connected to RSA3030 at {self.address} [{self._idn}]")
                             # Save successful address to cache
                             self._save_last_address(resource)
                             return
                         else:
                             if self.debug:
-                                print(f"[DEBUG]   - Not an RSA3030, closing connection")
+                                _log.debug(f"[DEBUG]   - Not an RSA3030, closing connection")
                         inst.close()
                     except Exception as e:
                         if self.debug:
-                            print(f"[DEBUG]   - Error: {e}")
+                            _log.debug(f"[DEBUG]   - Error: {e}")
                         continue
                 else:
                     if self.debug:
-                        print(f"[DEBUG] Skipping resource (doesn't match filter): {resource}")
+                        _log.debug(f"[DEBUG] Skipping resource (doesn't match filter): {resource}")
 
         # 4) If still not found, try probing link-local addresses (169.254.x.x)
         # This helps with devices that don't appear in VISA resource list
         if self.instrument is None:
             if self.debug:
-                print(f"\n[DEBUG] No TCPIP resources found. Attempting link-local discovery...")
+                _log.debug(f"\n[DEBUG] No TCPIP resources found. Attempting link-local discovery...")
             
             link_local_ips = self._probe_link_local_ips()
             for ip in link_local_ips:
                 if self.debug:
-                    print(f"[DEBUG] Probing {ip}...")
+                    _log.debug(f"[DEBUG] Probing {ip}...")
                 try:
                     tcpip_address = f"TCPIP0::{ip}::INSTR"
                     inst = self.rm.open_resource(tcpip_address)
@@ -487,8 +473,8 @@ class RSA3030:
                         self._idn = idn
                         self.status = "Connected"
                         if self.debug:
-                            print(f"[DEBUG]   - ✓ Found RSA3030 at {ip}!")
-                        print(_SUCCESS_STYLE + f"Connected to RSA3030 at {self.address} [{self._idn}]")
+                            _log.debug(f"[DEBUG]   - ✓ Found RSA3030 at {ip}!")
+                        _log.info(f"Connected to RSA3030 at {self.address} [{self._idn}]")
                         # Save successful address to cache
                         self._save_last_address(tcpip_address)
                         return
@@ -496,11 +482,11 @@ class RSA3030:
                         inst.close()
                 except Exception as e:
                     if self.debug:
-                        print(f"[DEBUG]   - No response: {e}")
+                        _log.debug(f"[DEBUG]   - No response: {e}")
                     continue
         
         if self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Rigol RSA3030 not found. Ensure device is connected and powered on.")
+            raise ConnectionError("Rigol RSA3030 not found. Ensure device is connected and powered on.")
 
         # Clear status and cache ID
         try:
@@ -607,7 +593,7 @@ class RSA3030:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from RSA3030 at {self.address}")
+                _log.info(f"Disconnected from RSA3030 at {self.address}")
         self.status = "Not Connected"
         self.instrument = None
         self.address = None
@@ -618,7 +604,7 @@ class RSA3030:
     def _chk(self):
         """Verify instrument is connected."""
         if self.status != "Connected" or self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to RSA3030.")
+            raise ConnectionError("Not connected to RSA3030.")
 
     # -----------------------------
     # Measurement functions
@@ -723,7 +709,7 @@ class RSA3030:
             
             # Verify we got the expected number of points
             if len(amplitudes) != points:
-                print(f"Warning: Expected {points} points but got {len(amplitudes)}")
+                _log.info(f"Warning: Expected {points} points but got {len(amplitudes)}")
                 # Adjust frequency array to match actual data
                 if len(amplitudes) > 0:
                     frequencies = [start_freq + (stop_freq - start_freq) * i / (len(amplitudes) - 1) 
@@ -797,7 +783,7 @@ class RSA3030:
                 writer.writerow(['Frequency (Hz)', 'Amplitude (dBm)'])
                 for freq, amp in zip(frequencies, amplitudes):
                     writer.writerow([freq, amp])
-            print(f"Spectrogram saved to {filename}")
+            _log.info(f"Spectrogram saved to {filename}")
         
         return result
     
@@ -823,19 +809,19 @@ class RSA3030:
         
         if center_freq is not None:
             self.instrument.write(f":SENSe:FREQuency:CENTer {center_freq}")
-            print(f"Set center frequency to {center_freq/1e9:.3f} GHz")
+            _log.info(f"Set center frequency to {center_freq/1e9:.3f} GHz")
         
         if span is not None:
             self.instrument.write(f":SENSe:FREQuency:SPAN {span}")
-            print(f"Set span to {span/1e6:.1f} MHz")
+            _log.info(f"Set span to {span/1e6:.1f} MHz")
         
         if rbw is not None:
             self.instrument.write(f":SENSe:BANDwidth:RESolution {rbw}")
-            print(f"Set RBW to {rbw/1e3:.1f} kHz")
+            _log.info(f"Set RBW to {rbw/1e3:.1f} kHz")
         
         if vbw is not None:
             self.instrument.write(f":SENSe:BANDwidth:VIDeo {vbw}")
-            print(f"Set VBW to {vbw/1e3:.1f} kHz")
+            _log.info(f"Set VBW to {vbw/1e3:.1f} kHz")
 
     def get(self, item: str):
         """
@@ -858,4 +844,4 @@ class RSA3030:
         if k == "identity":
             return self.get_identity()
         else:
-            raise ValueError(_ERROR_STYLE + f"Invalid item: {item} request to RSA3030")
+            raise ValueError(f"Invalid item: {item} request to RSA3030")

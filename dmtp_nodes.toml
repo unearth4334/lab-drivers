@@ -1,0 +1,21 @@
+# Manifest for the DM-TP Automation WebUI custom-node installer.
+#
+# Install this repository from the WebUI: Settings -> Custom Nodes ->
+#   https://github.com/unearth4334/lab-drivers.git
+#
+# The driver layer itself has no knowledge of DM-TP; everything automation-facing
+# lives in nodes/lab_drivers_nodes.
+
+[package]
+name = "lab-drivers"
+version = "0.2.0"
+api = 1
+summary = "Instrument nodes for VISA and serial lab equipment."
+
+[python]
+# Both the driver package and the node layer go on sys.path.
+import_roots = ["src", "nodes"]
+# Imported by the server so the @register decorators run.
+modules = ["lab_drivers_nodes"]
+# Installed into this package's private dependency prefix.
+requires = ["pyvisa>=1.11", "pyserial>=3.5", "colorama>=0.4.4", "numpy>=1.22"]

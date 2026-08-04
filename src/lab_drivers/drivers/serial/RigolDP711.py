@@ -15,13 +15,12 @@ from typing import Optional
 
 import serial
 import serial.tools.list_ports
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.ports import resolve_address as _resolve_address, select_port
+
+_log = get_logger(__name__)
 
 
-# Console output styles
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 
 _DELAY = 0.2   # inter-command delay (s)
 _IDN_DELAY = 0.5  # longer wait after *IDN? on first connect
@@ -33,73 +32,65 @@ class RigolDP711:
     and measurement helpers for bench automation.
     """
     
-    def __init__(self, auto_connect: bool = True, com_port: Optional[str] = None, baud_rate: int = 9600):
+    def __init__(self, auto_connect: bool = True, address: Optional[str] = None,
+                 baud_rate: int = 9600, *, com_port: Optional[str] = None,
+                 interactive: Optional[bool] = None):
         """
         Initialize RigolDP711 driver.
-        
+
         Args:
             auto_connect: Automatically connect to device on initialization
-            com_port: Optional explicit COM port (e.g., 'COM4', '/dev/ttyUSB0')
+            address: Optional explicit serial port (e.g., 'COM4', '/dev/ttyUSB0')
             baud_rate: Serial baud rate (default: 9600)
+            com_port: Deprecated alias for ``address``.
+            interactive: Whether a missing port may be resolved by prompting.
+                ``None`` prompts only when stdin is a terminal.
         """
-        init(autoreset=True)
-        
+        address = _resolve_address(address, com_port)
+
         self.ser: Optional[serial.Serial] = None
         self.address: Optional[str] = None
         self.status: str = "Not Connected"
         self.identity: Optional[str] = None
-        self._com_port_hint: Optional[str] = com_port
+        self._com_port_hint: Optional[str] = address
         self._baud_rate: int = baud_rate
+        self._interactive: Optional[bool] = interactive
 
         if auto_connect:
-            self.connect(com_port=com_port, baud_rate=baud_rate)
-    
-    def connect(self, com_port: Optional[str] = None, baud_rate: int = 9600) -> None:
+            self.connect(address=address, baud_rate=baud_rate)
+
+    def connect(self, address: Optional[str] = None, baud_rate: int = 9600, *,
+                com_port: Optional[str] = None,
+                interactive: Optional[bool] = None) -> None:
         """
         Establish connection to RigolDP711 power supply.
 
         Args:
-            com_port: Optional serial port (for example, ``"COM4"`` or ``"/dev/ttyUSB0"``).
+            address: Optional serial port (for example, ``"COM4"`` or
+                ``"/dev/ttyUSB0"``). When omitted, ``DP711_COM_PORT`` is
+                consulted, then the operator is prompted if this process has a
+                terminal.
             baud_rate: Serial baud rate.
+            com_port: Deprecated alias for ``address``.
+            interactive: Override the prompting decision for this call.
+
+        Raises:
+            ConnectionError: If device not found, connection fails, or a port is
+                needed but this process cannot prompt for one.
 
         Returns:
             None
 
         Example:
             >>> psu = RigolDP711(auto_connect=False)
-            >>> psu.connect(com_port="/dev/ttyUSB0")
+            >>> psu.connect(address="/dev/ttyUSB0")
         """
-        # Try explicit COM port first
-        explicit_port = com_port or self._com_port_hint
-        
-        # Try environment variable
-        if explicit_port is None:
-            try:
-                explicit_port = os.environ.get('DP711_COM_PORT')
-            except Exception:
-                pass
-        
-        # Prompt user to select COM port
-        if explicit_port is None:
-            ports = serial.tools.list_ports.comports()
-            if not ports:
-                raise ConnectionError(_ERROR_STYLE + "No COM ports found")
-            
-            print("\nAvailable COM ports:")
-            for i, port in enumerate(ports, start=1):
-                print(f"  {i}. {port.device} - {port.description}")
-            
-            while True:
-                try:
-                    selection = int(input("Select COM port for Rigol DP711 (1, 2, ...): "))
-                    if 1 <= selection <= len(ports):
-                        explicit_port = ports[selection - 1].device
-                        os.environ['DP711_COM_PORT'] = explicit_port
-                        break
-                    print(_ERROR_STYLE + "Invalid selection")
-                except ValueError:
-                    print(_ERROR_STYLE + "Invalid input. Enter a number.")
-        
+        address = _resolve_address(address, com_port) or self._com_port_hint
+        explicit_port = select_port(
+            "Rigol DP711", port=address, env_var="DP711_COM_PORT",
+            interactive=self._interactive if interactive is None else interactive,
+        )
+
         # Open serial connection
         try:
             self.ser = serial.Serial(
@@ -141,15 +132,15 @@ class RigolDP711:
                     break
 
             if not self.identity:
-                raise ConnectionError(_ERROR_STYLE + "Device not responding with valid identity")
+                raise ConnectionError("Device not responding with valid identity")
 
             self.status = "Connected"
-            print(_SUCCESS_STYLE + f"Connected to {self.identity}")
+            _log.info(f"Connected to {self.identity}")
 
         except serial.SerialException as e:
-            raise ConnectionError(_ERROR_STYLE + f"Failed to connect to {explicit_port}: {e}")
+            raise ConnectionError(f"Failed to connect to {explicit_port}: {e}")
         except Exception as e:
-            raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to {explicit_port}: {e}")
+            raise ConnectionError(f"Unexpected error connecting to {explicit_port}: {e}")
 
     def disconnect(self) -> None:
         """
@@ -165,7 +156,7 @@ class RigolDP711:
             try:
                 self.ser.close()
             finally:
-                print(f"\rDisconnected from Rigol DP711 at {self.address}")
+                _log.info(f"Disconnected from Rigol DP711 at {self.address}")
                 self.ser = None
         
         self.status = "Not Connected"
@@ -174,7 +165,7 @@ class RigolDP711:
     def _chk(self) -> None:
         """Verify device is connected before operations."""
         if self.status != "Connected" or self.ser is None or not self.ser.is_open:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to Rigol DP711")
+            raise ConnectionError("Not connected to Rigol DP711")
     
     def _write(self, command: str) -> None:
         """Write a command to the device."""
@@ -227,7 +218,7 @@ class RigolDP711:
         
         if item_upper not in items:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid item '{item}'. "
+                f"Invalid item '{item}'. "
                 f"Valid items: {', '.join(items.keys())}"
             )
 
@@ -253,7 +244,7 @@ class RigolDP711:
         self._chk()
         
         if not 0 <= voltage <= 30:
-            raise ValueError(_ERROR_STYLE + f"Voltage {voltage}V out of range (0-30V)")
+            raise ValueError(f"Voltage {voltage}V out of range (0-30V)")
         
         command = f':VOLT {voltage:.3f}'
         self._write(command)
@@ -278,7 +269,7 @@ class RigolDP711:
         self._chk()
         
         if not 0 <= current <= 5:
-            raise ValueError(_ERROR_STYLE + f"Current {current}A out of range (0-5A)")
+            raise ValueError(f"Current {current}A out of range (0-5A)")
         
         command = f':CURR {current:.3f}'
         self._write(command)
@@ -301,7 +292,7 @@ class RigolDP711:
             response = self._query(':MEAS:VOLT?')
             return float(response)
         except ValueError as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to parse voltage measurement: {e}")
+            raise ValueError(f"Failed to parse voltage measurement: {e}")
 
     def measure_current(self) -> float:
         """
@@ -321,7 +312,7 @@ class RigolDP711:
             response = self._query(':MEAS:CURR?')
             return float(response)
         except ValueError as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to parse current measurement: {e}")
+            raise ValueError(f"Failed to parse current measurement: {e}")
 
     def set_output_state(self, state: bool) -> None:
         """
@@ -343,10 +334,10 @@ class RigolDP711:
         
         if state:
             command = ':OUTP ON'
-            print(_SUCCESS_STYLE + "Rigol DP711 output: ON")
+            _log.info("Rigol DP711 output: ON")
         else:
             command = ':OUTP OFF'
-            print(_SUCCESS_STYLE + "Rigol DP711 output: OFF")
+            _log.info("Rigol DP711 output: OFF")
         
         self._write(command)
 

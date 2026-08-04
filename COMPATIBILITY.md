@@ -30,6 +30,31 @@ We follow [Semantic Versioning](https://semver.org/):
 - Package layout (import paths may change; use public `__all__` exports)
 - Debug/diagnostic attributes (prefixed with `_`)
 
+## Current Deprecations
+
+| Deprecated | Since | Replacement | Removal |
+| --- | --- | --- | --- |
+| `com_port=` on serial constructors and `connect()` | 0.2.0 | `address=` | 1.0.0 |
+
+`address=` is now the parameter name on every driver, VISA and serial alike, so
+one caller can address any instrument the same way. Passing `com_port=` still
+works and emits a `DeprecationWarning`.
+
+Behaviour changes in 0.2.0 that are not API breaks, but are worth knowing:
+
+- **Drivers no longer print.** Output goes to the `lab_drivers` logger and is
+  silent until the application configures logging. Call
+  `lab_drivers.enable_console_logging()` to restore the previous console output.
+- **No prompting without a terminal.** A driver that cannot resolve a serial
+  port now raises `ConnectionError` instead of printing a selection menu, unless
+  stdin is a tty. The old behaviour blocked forever under a server or CI job.
+- **`DMM6500.fetch_trace(step=)` now defaults to `False`.** It previously
+  defaulted to `True`, prompting between every buffer transfer.
+
+Fixed in 0.2.0: `Keysight34460A`, `RigolDP832`, `RigolDS7034` and `U1233A` could
+not be imported at all -- they referenced a `loading` module that does not exist
+in this repository.
+
 ## Deprecation Process
 
 1. **Announce** deprecated API in release notes and docstrings

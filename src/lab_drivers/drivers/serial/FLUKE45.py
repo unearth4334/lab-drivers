@@ -123,13 +123,12 @@ from typing import Optional, Tuple
 import numpy
 import serial
 import serial.tools.list_ports
-from colorama import init, Fore, Style
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.ports import resolve_address as _resolve_address, select_port
+
+_log = get_logger(__name__)
 
 
-# Console output styles
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
 
 _DELAY = 0.01  # in seconds
 
@@ -140,78 +139,66 @@ class FLUKE45:
     and a generic `get()` interface for data-logger workflows.
     """
     
-    def __init__(self, auto_connect: bool = True, com_port: Optional[str] = None, baud_rate: int = 9600, debug: bool = False):
+    def __init__(self, auto_connect: bool = True, address: Optional[str] = None,
+                 baud_rate: int = 9600, debug: bool = False, *,
+                 com_port: Optional[str] = None, interactive: Optional[bool] = None):
         """
         Initialize FLUKE45 driver.
-        
+
         Args:
             auto_connect: Automatically connect to device on initialization
-            com_port: Optional explicit COM port (e.g., 'COM7', '/dev/ttyUSB0')
+            address: Optional explicit serial port (e.g., 'COM7', '/dev/ttyUSB0')
             baud_rate: Serial baud rate (default: 9600)
-            debug: Enable debug printing (default: False)
+            debug: Enable debug logging (default: False)
+            com_port: Deprecated alias for ``address``.
+            interactive: Whether a missing port may be resolved by prompting.
+                ``None`` prompts only when stdin is a terminal.
         """
-        init(autoreset=True)
-        
+        address = _resolve_address(address, com_port)
+
         self.ser: Optional[serial.Serial] = None
         self.address: Optional[str] = None
         self.status: str = "Not Connected"
         self.identity: Optional[str] = None
         self.debug: bool = debug
-        self._com_port_hint: Optional[str] = com_port
+        self._com_port_hint: Optional[str] = address
         self._baud_rate: int = baud_rate
+        self._interactive: Optional[bool] = interactive
 
         if auto_connect:
-            self.connect(com_port=com_port, baud_rate=baud_rate)
-    
-    def connect(self, com_port: Optional[str] = None, baud_rate: int = 9600) -> None:
+            self.connect(address=address, baud_rate=baud_rate)
+
+    def connect(self, address: Optional[str] = None, baud_rate: int = 9600, *,
+                com_port: Optional[str] = None,
+                interactive: Optional[bool] = None) -> None:
         """
         Establish connection to Fluke 45 multimeter.
-        
+
         Args:
-            com_port: Optional COM port (e.g., 'COM7', '/dev/ttyUSB0'). If None, prompt user.
+            address: Optional serial port (e.g., 'COM7', '/dev/ttyUSB0'). When
+                omitted, ``FLUKE45_COM_PORT`` is consulted, then the operator is
+                prompted if this process has a terminal.
             baud_rate: Serial baud rate (default: 9600)
-            
+            com_port: Deprecated alias for ``address``.
+            interactive: Override the prompting decision for this call.
+
         Raises:
-            ConnectionError: If device not found or connection fails.
+            ConnectionError: If device not found, connection fails, or a port is
+                needed but this process cannot prompt for one.
 
         Returns:
             None
 
         Example:
             >>> dmm = FLUKE45(auto_connect=False)
-            >>> dmm.connect(com_port="/dev/ttyUSB0")
+            >>> dmm.connect(address="/dev/ttyUSB0")
         """
-        # 1) Try explicit COM port first
-        explicit_port = com_port or self._com_port_hint
-        
-        # 2) Try environment variable
-        if explicit_port is None:
-            try:
-                explicit_port = os.environ.get('FLUKE45_COM_PORT')
-            except Exception:
-                pass
-        
-        # 3) Prompt user to select COM port
-        if explicit_port is None:
-            ports = serial.tools.list_ports.comports()
-            if not ports:
-                raise ConnectionError(_ERROR_STYLE + "No COM ports found")
-            
-            print("\nAvailable COM ports:")
-            for i, port in enumerate(ports, start=1):
-                print(f"  {i}. {port.device} - {port.description}")
-            
-            while True:
-                try:
-                    selection = int(input("Select COM port for FLUKE45 (1, 2, ...): "))
-                    if 1 <= selection <= len(ports):
-                        explicit_port = ports[selection - 1].device
-                        os.environ['FLUKE45_COM_PORT'] = explicit_port
-                        break
-                    print(_ERROR_STYLE + "Invalid selection")
-                except ValueError:
-                    print(_ERROR_STYLE + "Invalid input. Enter a number.")
-        
+        address = _resolve_address(address, com_port) or self._com_port_hint
+        explicit_port = select_port(
+            "FLUKE45", port=address, env_var="FLUKE45_COM_PORT",
+            interactive=self._interactive if interactive is None else interactive,
+        )
+
         # 4) Open serial connection
         try:
             self.ser = serial.Serial(explicit_port, baud_rate, timeout=5)
@@ -225,15 +212,15 @@ class FLUKE45:
             self.identity = identity_bytes.decode('ascii', errors='ignore').strip()
             
             if len(self.identity) < 5:
-                raise ConnectionError(_ERROR_STYLE + "Device not responding with valid identity")
+                raise ConnectionError("Device not responding with valid identity")
             
             self.status = "Connected"
-            print(_SUCCESS_STYLE + f"Connected to {self.identity}")
+            _log.info(f"Connected to {self.identity}")
             
         except serial.SerialException as e:
-            raise ConnectionError(_ERROR_STYLE + f"Failed to connect to {explicit_port}: {e}")
+            raise ConnectionError(f"Failed to connect to {explicit_port}: {e}")
         except Exception as e:
-            raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to {explicit_port}: {e}")
+            raise ConnectionError(f"Unexpected error connecting to {explicit_port}: {e}")
     
     def disconnect(self) -> None:
         """
@@ -249,7 +236,7 @@ class FLUKE45:
             try:
                 self.ser.close()
             finally:
-                print(f"\rDisconnected from FLUKE45 at {self.address}")
+                _log.info(f"Disconnected from FLUKE45 at {self.address}")
                 self.ser = None
         
         self.status = "Not Connected"
@@ -258,7 +245,7 @@ class FLUKE45:
     def _chk(self) -> None:
         """Verify device is connected before operations."""
         if self.status != "Connected" or self.ser is None or not self.ser.is_open:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to FLUKE45")
+            raise ConnectionError("Not connected to FLUKE45")
     
     def measure_voltage(self) -> float:
         """
@@ -277,7 +264,7 @@ class FLUKE45:
         self._chk()
         
         if self.debug:
-            print("MEAS?")
+            _log.info("MEAS?")
         
         command = 'MEAS?\n'
         
@@ -290,13 +277,13 @@ class FLUKE45:
             val_str = val_bytes.decode('ascii', errors='ignore').strip()
             
             if not val_str:
-                raise ValueError(_ERROR_STYLE + "No response from device")
+                raise ValueError("No response from device")
             
             return float(val_str)
         except ValueError as e:
-            raise ValueError(_ERROR_STYLE + f"Failed to parse measurement: {e}")
+            raise ValueError(f"Failed to parse measurement: {e}")
         except Exception as e:
-            raise ConnectionError(_ERROR_STYLE + f"Communication error during measurement: {e}")
+            raise ConnectionError(f"Communication error during measurement: {e}")
     
     # Alias for backward compatibility
     def meas(self) -> float:
@@ -383,6 +370,6 @@ class FLUKE45:
             return self.measure_voltage()
         
         raise ValueError(
-            _ERROR_STYLE + f"Invalid item '{item}'. "
+            f"Invalid item '{item}'. "
             f"Valid items: voltage"
         )

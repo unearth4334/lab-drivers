@@ -268,17 +268,12 @@ import pyvisa
 import time
 import numpy
 import os
-from colorama import init, Fore, Back, Style
-try:
-    from .loading import *
-except:
-    from loading import *
+from lab_drivers.core.log import get_logger
+from lab_drivers.core.progress import loading
 
+_log = get_logger(__name__)
 
 # Constants and global variables
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT  + "\r"
 _MAX_FILENAMES = 100
 _DELAY = 0.1 #seconds
 
@@ -292,10 +287,14 @@ class RigolDS7034:
     "SCREENSHOT".
     """
 
-    def __init__(self, auto_connect=True):
-        """Initialize the driver and optionally connect."""
-        
-        init(autoreset=True)
+    def __init__(self, auto_connect=True, address=None):
+        """Initialize the driver and optionally connect.
+
+        Args:
+            auto_connect: Connect during initialization when True.
+            address: Optional explicit VISA resource string. When omitted, the
+                bus is scanned for a matching instrument.
+        """
 
         self.rm = pyvisa.ResourceManager()
         self.address = None
@@ -303,35 +302,46 @@ class RigolDS7034:
         self.loading = loading()
         self.screenshot_filename = None
         self.screenshot_filename_warning_given = False
+        self._address_hint = address
 
         self.status = "Not Connected"
-        
+
         if auto_connect:
-            self.connect()
+            self.connect(address=address)
 
-    def connect(self):
-        """Connect to the first VISA resource matching DS7034 identifiers."""
+    def connect(self, address=None):
+        """Connect to the DS7034, by explicit address or by scanning the bus.
 
-        resources = self.rm.list_resources()
-        for resource in resources:
-            if 'DS7' in resource:
-                self.address = resource
-                break
+        Args:
+            address: Optional explicit VISA resource string.
+
+        Raises:
+            ConnectionError: The instrument was not found, or opening it failed.
+        """
+        explicit = address or self._address_hint
+        if explicit:
+            self.address = explicit
+        else:
+            resources = self.rm.list_resources()
+            for resource in resources:
+                if 'DS7' in resource:
+                    self.address = resource
+                    break
 
         if self.address is None:
             error_message = "Rigol DS7034 Oscilloscope not found."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         try:
             self.instrument = self.rm.open_resource(self.address)
             self.instrument.read_termination = '\n'
             self.status = "Connected"
             success_message = f"Connected to Rigol DS7034 Oscilloscope at {self.address}"
-            print(_SUCCESS_STYLE + success_message)
+            _log.info(success_message)
 
         except pyvisa.Error as e:
             error_message = f"Error! Failed to connect to Rigol DS7034 Oscilloscope at {self.address}: {e}"
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
     
     def disconnect(self):
@@ -339,7 +349,7 @@ class RigolDS7034:
         
         if self.instrument is not None:
             self.instrument.close()
-            print(f"\rDisconnected from Rigol DS7034 Oscilloscope at {self.address}")
+            _log.info(f"Disconnected from Rigol DS7034 Oscilloscope at {self.address}")
             self.status = "Not Connected"
 
     def get(self,item,channel=1):
@@ -381,7 +391,7 @@ class RigolDS7034:
             return result
         else:
             error_message = f"Invalid item: {item} request to Rigol DS7034 oscilloscope"
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
 
     """
@@ -480,18 +490,18 @@ class RigolDS7034:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         if isinstance(source, int) and 1 <= source <= 4:
             source = f"CHANnel{source}"
         
         if not self.__is_valid_item(item):
             error_message = f"Invalid item: \"{item}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not self.__is_valid_source(source):
             error_message = f"Invalid source: \"{source}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
 
 
         command = f"MEASURE:ITEM? {item},{source}"
@@ -528,25 +538,25 @@ class RigolDS7034:
             
             if not self.status == "Connected":
                 error_message = "Not connected to Rigol DS7034 Oscilloscope."
-                raise ConnectionError(_ERROR_STYLE + error_message)
+                raise ConnectionError(error_message)
             
             if isinstance(source, int) and 1 <= source <= 4:
                 source = f"CHANnel{source}"
             
             if not self.__is_valid_item(item):
                 error_message = f"Invalid item: \"{item}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-                raise ValueError(_ERROR_STYLE + error_message)
+                raise ValueError(error_message)
             
             if not self.__is_valid_source(source):
                 error_message = f"Invalid source: \"{source}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-                raise ValueError(_ERROR_STYLE + error_message)
+                raise ValueError(error_message)
 
 
             values = []
             for type in types:
                 if not type in {"MAXimum", "MINimum", "CURRent", "AVERages", "DEViation", "MAX", "MIN", "CURR", "AVER", "DEV"}:
                     error_message = f"Invalid statistic type: \"{type}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-                    raise ValueError(_ERROR_STYLE + error_message)
+                    raise ValueError(error_message)
 
                 command = f"MEASURE:STAT:ITEM? {type},{item},{source}"
                 value = self.instrument.query(command)
@@ -571,18 +581,18 @@ class RigolDS7034:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         if isinstance(source, int) and 1 <= source <= 4:
             source = f"CHANnel{source}"
         
         if not self.__is_valid_item(item):
             error_message = f"Invalid item: \"{item}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not self.__is_valid_source(source):
             error_message = f"Invalid source: \"{source}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
 
         command = f"MEASURE:STAT:ITEM {item},{source}"
         self.instrument.write(command)
@@ -599,12 +609,12 @@ class RigolDS7034:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         command = "MEASURE:STAT:RESET"
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
-        print("\rReset statistics on Rigol DS7034 Multimeter.")
+        _log.info("Reset statistics on Rigol DS7034 Multimeter.")
 
         
     """
@@ -621,7 +631,7 @@ class RigolDS7034:
         
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         if isinstance(item_n, int) and 1 <= item_n <= 10:
             item_n = f"ITEM{item_n}"
@@ -629,7 +639,7 @@ class RigolDS7034:
 
         if not item_n_upper in {"ITEM1","ITEM2","ITEM3","ITEM4","ITEM5","ITEM6","ITEM7","ITEM8","ITEM9","ITEM10","ALL"}:
             error_message = f"Invalid item: \"{item_n}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         command = f"MEASURE:CLE {item_n}"
         self.instrument.write(command)
@@ -653,30 +663,30 @@ class RigolDS7034:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
 
         if isinstance(channel, int) and 1 <= channel <= 4:
             channel = f"CHANnel{channel}"
 
         if not channel.upper() in {"CHANNEL1","CHANNEL2","CHANNEL3","CHANNEL4","CHAN1","CHAN2","CHAN3","CHAN4"}:
             error_message = f"Invalid channel: \"{channel}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not impedance.upper() in {"OMEG","FIFTY","FIFT"}:
             error_message = f"Invalid impedance: \"{impedance}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not gain in {0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000}:
             error_message = f"Invalid gain: \"{gain}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not coupling.upper() in {"AC","DC"}:
             error_message = f"Invalid coupling: \"{coupling}\" request to Rigol DS7034 Oscilloscope. Check the documentation."  
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not bwlimit.upper() in {"20M","250M","OFF"}:
             error_message = f"Invalid bandwidth limit: \"{bwlimit}\" request to Rigol DS7034 Oscilloscope. Check the documentation."    
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         settings = ["IMPedance","PROBe","COUPling","BWLimit"]
         probes = ["\033[93mProbe 1\033[39m", # yellow
@@ -695,14 +705,14 @@ class RigolDS7034:
                     warning_message = f"Failed to configure bandwidth limit on {probes[int(channel[-1])-1]} because scale < 20mV/div."   
                 else:
                     warning_message = f"Failed to configure {probes[int(channel[-1])-1]}. Try reconnecting the probe."
-                print(_WARNING_STYLE + warning_message)
+                _log.warning(warning_message)
                 self.loading.input_with_flashing("Press Enter to continue (CTRL+C to QUIT)...\n")
                 return False
 
 
         if impedance == "OMEG": impedance = "1Mohm"
         else: impedance = "50ohm"
-        print(f"\r{probes[int(channel[-1])-1]}: Impedance:{impedance}, Gain:{gain}, Coupling:{coupling}, Bandwidth Limit:{bwlimit}")
+        _log.info(f"{probes[int(channel[-1])-1]}: Impedance:{impedance}, Gain:{gain}, Coupling:{coupling}, Bandwidth Limit:{bwlimit}")
         
         return True
     
@@ -719,11 +729,11 @@ class RigolDS7034:
     def configure_time_scale(self, scale = 1E-6):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if not isinstance(scale, (int, float)):
             error_message = f"Invalid timebase scale: \"{scale}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         command = f":TIMebase:SCALe {scale}"
         self.instrument.write(command)
@@ -742,11 +752,11 @@ class RigolDS7034:
     def configure_time_offset(self, offset = 0):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if not isinstance(offset, (int, float)):
             error_message = f"Invalid timebase offset: \"{offset}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         command = f":TIMebase:OFFSet {offset}"
         self.instrument.write(command)
@@ -766,18 +776,18 @@ class RigolDS7034:
     def set_vertical_scale(self, channel, value=0.1):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if isinstance(channel, int) and 1 <= channel <= 4:
             channel = f"CHANnel{channel}"
 
         if not channel.upper() in {"CHANNEL1","CHANNEL2","CHANNEL3","CHANNEL4","CHAN1","CHAN2","CHAN3","CHAN4"}:
             error_message = f"Invalid channel: \"{channel}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not isinstance(value, (int, float)):
             error_message = f"Invalid vertical scale: \"{value}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         command = f":{channel}:SCALe {value}"
         self.instrument.write(command)
@@ -798,18 +808,18 @@ class RigolDS7034:
     def set_vertical_offset(self, channel, value=0):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if isinstance(channel, int) and 1 <= channel <= 4:
             channel = f"CHANnel{channel}"
 
         if not channel.upper() in {"CHANNEL1","CHANNEL2","CHANNEL3","CHANNEL4","CHAN1","CHAN2","CHAN3","CHAN4"}:
             error_message = f"Invalid channel: \"{channel}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         if not isinstance(value, (int, float)):
             error_message = f"Invalid vertical offset: \"{value}\" request to Rigol DS7034 Oscilloscope. Check the documentation."
-            raise ValueError(_ERROR_STYLE + error_message)
+            raise ValueError(error_message)
         
         command = f":{channel}:OFFSet {value}"
         self.instrument.write(command)
@@ -843,7 +853,7 @@ class RigolDS7034:
             f"Failed to find an available filename after {max_tries} tries. "
             "Please clean up the output files or increase 'max_tries' value."
         )
-        raise FileExistsError(_ERROR_STYLE + error_message)
+        raise FileExistsError(error_message)
     
 
     """
@@ -862,7 +872,7 @@ class RigolDS7034:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
-            raise ConnectionError(_ERROR_STYLE + error_message)
+            raise ConnectionError(error_message)
         
         if filename==None:
             filename = self.screenshot_filename
@@ -876,7 +886,7 @@ class RigolDS7034:
                     "No path provided for screenshot. "
                     "The screenshot will be saved in the current directory with a timestamped filename. Use 'set_screenshot_path(\"path/to/save/*\")' or 'set_screenshot_path(\"path/to/save/filename.png\")' to specify a directory to save the screenshot in."
                 )
-                print(_WARNING_STYLE + warning_message)
+                _log.warning(warning_message)
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"DS7034_screenshot_{timestamp}.png"
         elif filename.endswith("*"):
@@ -898,12 +908,12 @@ class RigolDS7034:
             if create_directory.lower() == "y":
                 os.makedirs(directory)
             else:
-                raise FileNotFoundError(_ERROR_STYLE + "Directory does not exist.")
+                raise FileNotFoundError("Directory does not exist.")
 
         with open(filename, "wb") as file:
             file.write(image_data)
 
-        #print(_SUCCESS_STYLE + f"Screenshot saved as: {filename}")
+        #print(f"Screenshot saved as: {filename}")
 
         return filename
     

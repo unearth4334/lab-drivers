@@ -197,27 +197,10 @@ from typing import Optional, Tuple, Union
 
 import numpy
 import pyvisa
-from colorama import init, Fore, Back, Style
+from lab_drivers.core.log import get_logger
 
-
-# Loading module with fallback
-try:
-    from .loading import loading
-except ImportError:
-    try:
-        from loading import loading
-    except ImportError:
-        class loading:
-            """Fallback loading class if module unavailable."""
-            def delay_with_loading_indicator(self, seconds: float) -> None:
-                time.sleep(seconds)
-            def display_loading_bar(self, progress: float, loading_text: str = "") -> None:
-                pass
-
-# Console output styles
-_ERROR_STYLE = Fore.RED + Style.BRIGHT + "\rError! "
-_SUCCESS_STYLE = Fore.GREEN + Style.BRIGHT + "\r"
-_WARNING_STYLE = Fore.YELLOW + Style.BRIGHT + "\rWarning! "
+_log = get_logger(__name__)
+from lab_drivers.core.progress import loading
 
 _DELAY = 0.05
 
@@ -236,8 +219,6 @@ class DL3021:
             auto_connect: Automatically connect to device on initialization
             address: Optional explicit VISA address
         """
-        init(autoreset=True)
-        
         self.rm: Optional[pyvisa.ResourceManager] = pyvisa.ResourceManager()
         self.address: Optional[str] = None
         self.instrument: Optional[pyvisa.resources.MessageBasedResource] = None
@@ -280,28 +261,28 @@ class DL3021:
                 if "DL3021" not in idn and "DL3" not in idn:
                     inst.close()
                     raise ConnectionError(
-                        _ERROR_STYLE + f"Device at '{explicit}' is not a DL3021 (IDN='{idn}')."
+                        f"Device at '{explicit}' is not a DL3021 (IDN='{idn}')."
                     )
                 
                 self.instrument = inst
                 self.address = explicit
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"Failed to connect to '{explicit}': {e}")
+                raise ConnectionError(f"Failed to connect to '{explicit}': {e}")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE + f"Unexpected error connecting to '{explicit}': {e}")
+                raise ConnectionError(f"Unexpected error connecting to '{explicit}': {e}")
         
         # 2) Auto-detect by scanning resources
         if self.instrument is None:
             try:
                 resources = self.rm.list_resources()
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"PyVISA is not able to find any devices: {e}")
+                raise ConnectionError(f"PyVISA is not able to find any devices: {e}")
             
             # Look for DL3 in resource name
             dl3_resources = [elem for elem in resources if 'DL3' in elem]
             
             if len(dl3_resources) == 0:
-                raise ConnectionError(_ERROR_STYLE + "DL3021 not found")
+                raise ConnectionError("DL3021 not found")
             
             try:
                 self.address = dl3_resources[0]
@@ -311,16 +292,16 @@ class DL3021:
                 inst.timeout = 20000
                 self.instrument = inst
             except pyvisa.VisaIOError as e:
-                raise ConnectionError(_ERROR_STYLE + f"Failed to connect to auto-detected device: {e}")
+                raise ConnectionError(f"Failed to connect to auto-detected device: {e}")
             except Exception as e:
-                raise ConnectionError(_ERROR_STYLE + f"Unexpected error during auto-detection: {e}")
+                raise ConnectionError(f"Unexpected error during auto-detection: {e}")
         
         # 3) Initialize device
         if self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Failed to establish connection to DL3021")
+            raise ConnectionError("Failed to establish connection to DL3021")
         
         self.status = "Connected"
-        print(_SUCCESS_STYLE + f"Connected to {self.address}")
+        _log.info(f"Connected to {self.address}")
     
     def disconnect(self) -> None:
         """
@@ -336,7 +317,7 @@ class DL3021:
             try:
                 self.instrument.close()
             finally:
-                print(f"\rDisconnected from DL3021 at {self.address}")
+                _log.info(f"Disconnected from DL3021 at {self.address}")
                 self.instrument = None
         
         self.status = "Not Connected"
@@ -345,7 +326,7 @@ class DL3021:
     def _chk(self) -> None:
         """Verify device is connected before operations."""
         if self.status != "Connected" or self.instrument is None:
-            raise ConnectionError(_ERROR_STYLE + "Not connected to DL3021")
+            raise ConnectionError("Not connected to DL3021")
     
     def get(self, item: str, channel: int = 1) -> Union[float, Tuple[float, float]]:
         """
@@ -381,7 +362,7 @@ class DL3021:
         
         if item_upper not in items:
             raise ValueError(
-                _ERROR_STYLE + f"Invalid item '{item}'. "
+                f"Invalid item '{item}'. "
                 f"Valid items: {', '.join(items.keys())}"
             )
 
@@ -540,8 +521,7 @@ class DL3021:
         else:
             modeString = f' {mode} MODE '
             
-        print(Back.WHITE + Fore.BLACK + '\rProgrammable Load (DL3021):\t'
-             + Back.GREEN + ' ON ' + Back.BLUE + Fore.WHITE + f"{modeString}")
+        _log.info("Programmable Load (DL3021): ON %s", modeString.strip())
         command = ':SOURCE:INPUT:STAT ON'
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
@@ -560,7 +540,7 @@ class DL3021:
             >>> load.disable()
         """
         self._chk()
-        print(Back.WHITE + Fore.BLACK + '\rProgrammable Load (DL3021):\t' + Back.RED + ' OFF ')
+        _log.info("Programmable Load (DL3021): OFF")
         command = ':SOURCE:INPUT:STAT OFF'
         self.instrument.write(command)
         self.loading.delay_with_loading_indicator(_DELAY)
@@ -584,11 +564,7 @@ class DL3021:
         self.loading.delay_with_loading_indicator(_DELAY)
         mode = self.query_mode()
 
-        print(Back.WHITE + Fore.BLACK + '\rProgrammable Load (DL3021):\t', end='')
-        if result == 0:
-            print(Back.RED + ' OFF ', end='')
-        else:
-            print(Back.GREEN + ' ON ', end='')
+        state = 'OFF' if result == 0 else 'ON'
         if mode == 'CC':
             modeString = f' {mode} MODE | {self.get_cc_current():.2f} A   '
         elif mode == 'CR':
@@ -599,8 +575,8 @@ class DL3021:
             modeString = f' {mode} MODE | {self.get_cp_power():.2f} W   '
         else:
             modeString = f' {mode} MODE '
-        print(Back.BLUE + Fore.WHITE + f"{modeString}")
-        
+        _log.info("Programmable Load (DL3021): %s %s", state, modeString.strip())
+
         return result[0:(len(result) - 1)]
 
     def select_mode(self, mode: str) -> None:
