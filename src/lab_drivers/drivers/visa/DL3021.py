@@ -87,7 +87,6 @@ load.set_power(50.0)  # 50W
 Battery Discharge Test
 ----------------------
 ```python
-import time
 
 # Configure for battery test
 load.set_mode("CC")
@@ -192,7 +191,6 @@ See Also
 from __future__ import annotations
 
 import statistics
-import time
 from typing import Optional, Tuple, Union
 
 import numpy

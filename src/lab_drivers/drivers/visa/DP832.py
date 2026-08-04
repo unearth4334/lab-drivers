@@ -177,7 +177,6 @@ import time
 from typing import Optional, Union
 
 import pyvisa
-from colorama import init, Fore, Back, Style
 from lab_drivers.core.log import get_logger
 
 _log = get_logger(__name__)
@@ -201,8 +200,6 @@ class DP832:
             auto_connect: Automatically connect to device on initialization
             address: Optional explicit VISA address (e.g., 'USB0::0x1AB1::0x0E11::DP8C...::INSTR')
         """
-        init(autoreset=True)
-        
         self.rm: Optional[pyvisa.ResourceManager] = pyvisa.ResourceManager()
         self.address: Optional[str] = None
         self.instrument: Optional[pyvisa.resources.MessageBasedResource] = None
@@ -361,13 +358,12 @@ class DP832:
         self._chk()
         
         if state == 1 or state == 'ON':
-            _log.info('' + Back.WHITE + Fore.BLACK + f'Rigol DP832 Power Supply Channel {chan}:\t'
-                  + Back.GREEN + ' ON ' + Back.BLUE + Fore.WHITE 
-                  + f"  {self.get_voltage(chan):.2f} V | {self.get_current(chan):.2f} A   ")
+            _log.info(
+                "Rigol DP832 Power Supply Channel %s: ON  %.2f V | %.2f A",
+                chan, self.get_voltage(chan), self.get_current(chan))
             command = f':OUTP CH{chan},1'
         else:
-            _log.info('' + Back.WHITE + Fore.BLACK + f'Rigol DP832 Power Supply Channel {chan}:\t'
-                  + Back.RED + ' OFF ')
+            _log.info("Rigol DP832 Power Supply Channel %s: OFF", chan)
             command = f':OUTP CH{chan},0'
         self.instrument.write(command)
         time.sleep(_DELAY)

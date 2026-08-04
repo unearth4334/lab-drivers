@@ -115,7 +115,6 @@ See Also
 
 from __future__ import annotations
 
-import os
 import time
 import statistics
 from typing import Optional, Tuple

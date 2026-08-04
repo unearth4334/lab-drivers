@@ -97,7 +97,6 @@ import serial
 import statistics
 import numpy
 import serial.tools.list_ports
-import os
 from lab_drivers.core.log import get_logger
 from lab_drivers.core.ports import resolve_address as _resolve_address, select_port
 from lab_drivers.core.progress import loading

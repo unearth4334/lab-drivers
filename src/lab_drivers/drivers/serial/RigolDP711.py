@@ -9,7 +9,6 @@ Driver for Rigol DP711 power supply with serial (RS-232) connectivity.
 
 from __future__ import annotations
 
-import os
 import time
 from typing import Optional
 
