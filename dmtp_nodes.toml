@@ -1,0 +1,23 @@
+# DM-TP node-package manifest.
+#
+# Declares lab-drivers as an installable DM-TP custom-node package: which repo
+# directories go on sys.path, which module DM-TP imports so its @register
+# decorators run, and which third-party packages that module needs. See
+# docs/automation/custom_nodes.md in the DM-TP repository for the full format.
+
+[package]
+name = "lab-drivers"
+version = "0.3.2"
+api = 1
+summary = "Instrument nodes wrapping lab-drivers VISA equipment for DM-TP automation."
+
+[python]
+# "src" puts the lab_drivers package on the path; "nodes" puts the node module
+# (lab_drivers_nodes) on it.
+import_roots = ["src", "nodes"]
+# Imported for its @register side effects -- this is what publishes the nodes.
+modules = ["lab_drivers_nodes"]
+# Installed into the package's private deps prefix. These are the imports the
+# wrapped VISA driver modules pull in at import time; a working VISA backend
+# (NI-VISA or pyvisa-py) is still required on the machine that talks to hardware.
+requires = ["pyvisa>=1.11", "numpy>=1.22", "colorama>=0.4.4"]
