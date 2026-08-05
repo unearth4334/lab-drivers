@@ -17,6 +17,8 @@ class RigolDP711OutputNode(LabDriverNode):
     type_key = "rigol-dp711-output"
     label = "DP711 Output"
     summary = "Set voltage/current on a Rigol DP711 and switch its output."
+    instrument_key = "rigol-dp711"
+    instrument_label = "Rigol DP711 Power Supply"
     inputs = LabDriverNode.inputs + (
         NodeInput(
             name="voltage", label="Voltage", type="number", unit="V",

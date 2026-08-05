@@ -156,3 +156,55 @@ def test_nodes_build_drivers_without_prompting(registry: NodeRegistry) -> None:
 
 def test_nodes_are_pinned_non_interactive(registry: NodeRegistry) -> None:
     assert registry.create("ka3010p-output", {}).interactive is False
+
+
+# ---- generated coverage (automation_nodes.introspect) ----------------------
+#
+# Most instrument methods reach the picker via generation, not hand-written
+# wrappers -- see lab_drivers_nodes/__init__.py. These exercise that coverage
+# through the real discovery path (not the curated-only `registry` fixture
+# above), so a count assertion is used instead of an exhaustive type-key list:
+# the exact count shifts whenever a driver gains/loses a method.
+
+
+@pytest.fixture
+def discovered_registry() -> NodeRegistry:
+    reg = NodeRegistry()
+    reg.discover(extra_packages=["lab_drivers_nodes"])
+    return reg
+
+
+def test_generation_covers_far_more_than_the_curated_nodes(discovered_registry: NodeRegistry) -> None:
+    assert len(discovered_registry.types()) > 40, discovered_registry.warnings
+
+
+def test_generated_nodes_are_attributed_to_this_package(discovered_registry: NodeRegistry) -> None:
+    catalog = {entry["type"]: entry for entry in discovered_registry.catalog()}
+    generated = catalog["dl3021-enable"]  # DL3021 has no hand-written node
+
+    assert generated["package"] == "lab_drivers_nodes"
+    assert generated["instrument"] == {"key": "dl3021", "label": "Rigol DL3021 Electronic Load"}
+
+
+def test_excluded_methods_are_not_also_generated(discovered_registry: NodeRegistry) -> None:
+    """The curated nodes' own methods must not get a second, raw-method node."""
+    type_keys = set(discovered_registry.types())
+    assert "dmm6500-measure-voltage" not in type_keys
+    assert "ka3010p-set-voltage" not in type_keys
+    assert "rigol-dp711-turn-on" not in type_keys
+
+
+def test_generated_node_types_survive_forced_rediscovery(discovered_registry: NodeRegistry) -> None:
+    """Regression: generated classes must report their real owning module.
+
+    A forced re-discovery (every node-package install/update/uninstall) can't
+    re-run an already-imported module's top-level code, so it recovers types
+    via module-prefix ownership matching. Generated classes originally
+    reported ``automation_nodes.introspect`` as their module (the frame where
+    ``type()`` was called), not ``lab_drivers_nodes`` -- silently dropping
+    every generated node on the next re-discovery even though the package
+    stayed installed.
+    """
+    before = len(discovered_registry.types())
+    discovered_registry.discover(extra_packages=["lab_drivers_nodes"], force=True)
+    assert len(discovered_registry.types()) == before

@@ -17,6 +17,8 @@ class KA3010POutputNode(LabDriverNode):
     type_key = "ka3010p-output"
     label = "KA3010P Output"
     summary = "Set voltage/current on a Korad KA3010P and switch its output."
+    instrument_key = "ka3010p"
+    instrument_label = "Korad KA3010P Power Supply"
     inputs = LabDriverNode.inputs + (
         NodeInput(
             name="voltage", label="Voltage", type="number", unit="V",

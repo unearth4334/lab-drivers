@@ -24,6 +24,8 @@ class DMM6500MeasureNode(LabDriverNode):
     type_key = "dmm6500-measure"
     label = "DMM6500 Measure"
     summary = "Read voltage, current or resistance from a Keithley DMM6500."
+    instrument_key = "dmm6500"
+    instrument_label = "Keithley DMM6500"
     inputs = LabDriverNode.inputs + (
         NodeInput(
             name="function", label="Function", type="select", default="DC voltage",
