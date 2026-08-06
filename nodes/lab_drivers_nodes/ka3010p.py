@@ -46,9 +46,9 @@ class KA3010POutputNode(LabDriverNode):
     )
 
     def make_driver(self) -> Any:
-        from lab_drivers.drivers.serial import KA3010P
+        from lab_drivers.drivers.serial.KA3010P import KA3010P
 
-        return KA3010P(auto_connect=False, interactive=self.interactive)
+        return self.build_driver(KA3010P)
 
     def work(self, driver: Any, context: NodeContext) -> None:
         # Current limit first: raising the voltage before the limit is set would

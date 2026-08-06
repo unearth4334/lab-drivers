@@ -46,9 +46,9 @@ class RigolDP711OutputNode(LabDriverNode):
     )
 
     def make_driver(self) -> Any:
-        from lab_drivers.drivers.serial import RigolDP711
+        from lab_drivers.drivers.serial.RigolDP711 import RigolDP711
 
-        return RigolDP711(auto_connect=False, interactive=self.interactive)
+        return self.build_driver(RigolDP711)
 
     def work(self, driver: Any, context: NodeContext) -> None:
         driver.set_current(float(self.config["current_limit"]))

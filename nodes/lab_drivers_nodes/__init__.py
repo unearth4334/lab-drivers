@@ -26,19 +26,24 @@ from __future__ import annotations
 from automation_nodes import register
 from automation_nodes.introspect import generate_nodes
 
-from lab_drivers.drivers.serial import FLUKE45, KA3010P, RigolDP711, U1233A
-from lab_drivers.drivers.visa import (
-    DL3021,
-    DMM6500,
-    DP832,
-    KS33500B,
-    Keysight34460A,
-    KeysightMSOX4154A,
-    RSA3030,
-    RigolDP832,
-    RigolDS7034,
-    StanfordPS310,
-)
+# Imported by explicit submodule path: neither drivers/serial/__init__.py nor
+# drivers/visa/__init__.py re-exports these classes at package level (only
+# __all__, for `from package import *`), so `from lab_drivers.drivers.serial
+# import RigolDP711` would bind the *submodule*, not the class.
+from lab_drivers.drivers.serial.FLUKE45 import FLUKE45
+from lab_drivers.drivers.serial.KA3010P import KA3010P
+from lab_drivers.drivers.serial.RigolDP711 import RigolDP711
+from lab_drivers.drivers.serial.U1233A import U1233A
+from lab_drivers.drivers.visa.DL3021 import DL3021
+from lab_drivers.drivers.visa.DMM6500 import DMM6500
+from lab_drivers.drivers.visa.DP832 import DP832
+from lab_drivers.drivers.visa.KS33500B import KS33500B
+from lab_drivers.drivers.visa.Keysight34460A import Keysight34460A
+from lab_drivers.drivers.visa.KeysightMSOX4154A import KeysightMSOX4154A
+from lab_drivers.drivers.visa.RSA3030 import RSA3030
+from lab_drivers.drivers.visa.RigolDP832 import RigolDP832
+from lab_drivers.drivers.visa.RigolDS7034 import RigolDS7034
+from lab_drivers.drivers.visa.StanfordPS310 import StanfordPS310
 
 from lab_drivers_nodes._base import LabDriverNode
 from lab_drivers_nodes.dmm6500 import DMM6500MeasureNode
@@ -87,4 +92,4 @@ for _driver_cls, _key, _label, _exclude in _INSTRUMENTS:
         globals()[_node_cls.__name__] = _node_cls
         __all__.append(_node_cls.__name__)
 
-del _driver_cls, _key, _label, _exclude, _node_cls
+del _driver_cls, _key, _label, _exclude

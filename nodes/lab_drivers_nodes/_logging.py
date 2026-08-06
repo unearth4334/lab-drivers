@@ -1,13 +1,20 @@
 """Bridge lab-drivers log records into a running node's execution log.
 
-The drivers report through :mod:`logging`. While a node executes, its records
-should appear in the DM-TP run log the operator is watching -- not on the
-server's stdout.
+Where drivers report through :mod:`logging`, their records should appear in
+the DM-TP run log the operator is watching -- not on the server's stdout.
 
 The handler is scoped to the thread that installed it. Custom nodes run on a
 per-checkpoint worker thread, so without that filter two overlapping checkpoints
 would each collect the other's instrument output and both run logs would be
 wrong in a way that is very hard to read back afterwards.
+
+!!! note "Currently a no-op against the drivers in this repo"
+    None of the driver modules under ``src/lab_drivers`` call :mod:`logging`
+    today -- they print (via ``colorama``) directly to the console instead.
+    This bridge has nothing to intercept until that changes, or until a
+    console-output-capture mechanism replaces it. It is kept import-safe
+    (rather than removed) so a driver that starts using ``logging`` again
+    picks this up for free.
 """
 
 from __future__ import annotations
@@ -16,7 +23,11 @@ import logging
 import threading
 from contextlib import contextmanager
 
-from lab_drivers.core.log import LOGGER_NAME
+try:
+    from lab_drivers.core.log import LOGGER_NAME
+except ImportError:
+    # lab_drivers.core.log no longer exists on main (see module docstring).
+    LOGGER_NAME = "lab_drivers"
 
 #: logging level -> the level names NodeContext.log understands.
 _LEVELS = {

@@ -44,9 +44,9 @@ class DMM6500MeasureNode(LabDriverNode):
     )
 
     def make_driver(self) -> Any:
-        from lab_drivers.drivers.visa import DMM6500
+        from lab_drivers.drivers.visa.DMM6500 import DMM6500
 
-        return DMM6500(auto_connect=False)
+        return self.build_driver(DMM6500)
 
     def work(self, driver: Any, context: NodeContext) -> None:
         method_name, unit = _FUNCTIONS[self.config["function"]]

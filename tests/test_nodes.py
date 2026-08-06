@@ -18,8 +18,16 @@ from automation_nodes.base import NodeContext  # noqa: E402
 from automation_nodes.registry import NodeRegistry  # noqa: E402
 
 import lab_drivers_nodes  # noqa: E402,F401  (imported for its @register side effects)
-from lab_drivers.core.log import get_logger  # noqa: E402
 from lab_drivers_nodes._logging import driver_logs_to  # noqa: E402
+
+# lab_drivers.core.log (and its get_logger helper) no longer exists on main --
+# none of the driver modules call `logging` today, they print via colorama
+# instead. driver_logs_to() itself is still real, working code (kept for when
+# structured logging returns, or is replaced by a console-capture mechanism),
+# so these tests drive it directly against the stdlib logging module rather
+# than through the deleted convenience wrapper.
+def get_logger(name: str) -> logging.Logger:
+    return logging.getLogger(name)
 
 NODE_TYPES = ["dmm6500-measure", "ka3010p-output", "rigol-dp711-output"]
 
@@ -156,6 +164,96 @@ def test_nodes_build_drivers_without_prompting(registry: NodeRegistry) -> None:
 
 def test_nodes_are_pinned_non_interactive(registry: NodeRegistry) -> None:
     assert registry.create("ka3010p-output", {}).interactive is False
+
+
+# ---- connection kwarg adaptation --------------------------------------------
+#
+# lab-drivers' connect() methods disagree on the port-selection kwarg: most
+# VISA drivers take `address`, the serial ones take `com_port`, and a few
+# auto-detect with no port kwarg at all. LabDriverNode._connect() picks the
+# right one by inspecting the driver's actual connect() signature.
+
+
+class _FakeDriverBase:
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    def disconnect(self) -> None:
+        self.calls.append(("disconnect",))
+
+
+def _node_with_driver(monkeypatch: pytest.MonkeyPatch, driver: object) -> "lab_drivers_nodes.DMM6500MeasureNode":
+    node = lab_drivers_nodes.DMM6500MeasureNode({"function": "DC voltage", "samples": 1, "nplc": 1.0})
+    monkeypatch.setattr(node, "make_driver", lambda: driver)
+    monkeypatch.setattr(node, "perform", lambda driver, context: None)
+    return node
+
+
+def test_connect_prefers_address_kwarg_when_supported(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Driver(_FakeDriverBase):
+        def connect(self, address=None):
+            self.calls.append(("connect", "address", address))
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    node.config["address"] = "TCPIP::1.2.3.4::INSTR"
+    node.execute(NodeContext(config=node.config))
+
+    assert ("connect", "address", "TCPIP::1.2.3.4::INSTR") in driver.calls
+
+
+def test_connect_falls_back_to_com_port_kwarg(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Driver(_FakeDriverBase):
+        def connect(self, com_port=None):
+            self.calls.append(("connect", "com_port", com_port))
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    node.config["address"] = "COM4"
+    node.execute(NodeContext(config=node.config))
+
+    assert ("connect", "com_port", "COM4") in driver.calls
+
+
+def test_connect_calls_bare_connect_when_driver_only_auto_detects(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Driver(_FakeDriverBase):
+        def connect(self):
+            self.calls.append(("connect",))
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    node.config["address"] = "ignored"
+    logged: list[str] = []
+    context = NodeContext(config=node.config, log=lambda level, text: logged.append(text))
+    node.execute(context)
+
+    assert ("connect",) in driver.calls
+    assert any("ignored" in line for line in logged)
+
+
+def test_connect_skips_the_call_entirely_when_address_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Driver(_FakeDriverBase):
+        def connect(self, address=None):
+            self.calls.append(("connect", address))
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    node.execute(NodeContext(config=node.config))
+
+    assert ("connect", None) in driver.calls
+
+
+def test_disconnect_always_runs_even_when_connect_is_never_reached(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Driver(_FakeDriverBase):
+        def connect(self, address=None):
+            raise ConnectionError("simulated failure")
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    with pytest.raises(Exception):
+        node.execute(NodeContext(config=node.config))
+
+    assert ("disconnect",) in driver.calls
 
 
 # ---- generated coverage (automation_nodes.introspect) ----------------------
