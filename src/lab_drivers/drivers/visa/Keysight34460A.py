@@ -194,12 +194,22 @@ See Also
 - Device driver standard: docs/DEVICE_DRIVER_STANDARD.md
 """
 
+import time
+
 import pyvisa
 from colorama import init, Fore, Style
+
+# Loading module with fallback (see DL3021.py/DMM6500.py for the same pattern).
 try:
-    from .loading import *
-except:
-    from loading import *
+    from .loading import loading
+except ImportError:
+    try:
+        from loading import loading
+    except ImportError:
+        class loading:
+            """Fallback loading class if module unavailable."""
+            def delay_with_loading_indicator(self, seconds: float) -> None:
+                time.sleep(seconds)
 
 
 # Constants and global variables

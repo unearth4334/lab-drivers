@@ -98,10 +98,7 @@ import statistics
 import numpy
 import serial.tools.list_ports
 import os
-try:
-    from .loading import *
-except:
-    from loading import *
+import time
 
 from colorama import init, Fore, Back, Style
 
@@ -140,7 +137,6 @@ class U1233A:
         self.status = "Not Connected"
         self.ser = None
         self.identity = None
-        self.loading = loading()
 
         self.com_port = com_port
 
@@ -179,7 +175,7 @@ class U1233A:
 
             while True:
                 try:
-                    selection = int(self.loading.input_with_flashing("Select a COM port (1, 2, ...): "))
+                    selection = int(input("Select a COM port (1, 2, ...): "))
                     
                     if 1 <= selection <= len(ports):
                         com_port = ports[selection - 1].device
@@ -199,7 +195,7 @@ class U1233A:
                 raise ConnectionError(_ERROR_STYLE + error_message)
             
         self.ser.write(str('*IDN?\n').encode('ascii'))
-        self.loading.delay_with_loading_indicator(_DELAY)
+        time.sleep(_DELAY)
         self.identity = self.ser.readline().decode('ascii').strip()
         if len(self.identity) < 5:
             error_message = f"Failed to connect to U1233A on COM port {com_port}. Check that the device is connected and powered on."
@@ -229,7 +225,7 @@ class U1233A:
         command = 'READ?\n'
 
         self.ser.write(str(command).encode('ascii'))
-        self.loading.delay_with_loading_indicator(_DELAY)
+        time.sleep(_DELAY)
         val = self.ser.readline()
         return (float(val),0)
 
@@ -238,8 +234,7 @@ class U1233A:
 
         val = numpy.zeros(n)
         for x in range(n):
-            self.loading.display_loading_bar(x/n,loading_text="Averaging measurements from U1233A Multimeter")
-            self.loading.delay_with_loading_indicator(_DELAY)
+            time.sleep(_DELAY)
             temp = self.measure()
             val[x]=temp[0]
 

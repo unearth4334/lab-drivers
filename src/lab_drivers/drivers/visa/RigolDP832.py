@@ -216,14 +216,28 @@ See Also
 - data_logger: Main orchestrator class
 """
 
+import time
+
 import pyvisa
 import statistics
 import numpy
 from colorama import init, Fore, Back, Style
+
+# Loading module with fallback (see DL3021.py/DMM6500.py for the same pattern).
 try:
-    from .loading import *
-except:
-    from loading import *
+    from .loading import loading
+except ImportError:
+    try:
+        from loading import loading
+    except ImportError:
+        class loading:
+            """Fallback loading class if module unavailable."""
+            def delay_with_loading_indicator(self, seconds: float) -> None:
+                time.sleep(seconds)
+            def display_loading_bar(self, progress: float, loading_text: str = "") -> None:
+                pass
+            def input_with_flashing(self, prompt: str = "") -> str:
+                return input(prompt)
 
 
 # Constants and global variables

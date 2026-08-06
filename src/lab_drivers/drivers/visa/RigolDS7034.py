@@ -269,10 +269,20 @@ import time
 import numpy
 import os
 from colorama import init, Fore, Back, Style
+
+# Loading module with fallback (see DL3021.py/DMM6500.py for the same pattern).
 try:
-    from .loading import *
-except:
-    from loading import *
+    from .loading import loading
+except ImportError:
+    try:
+        from loading import loading
+    except ImportError:
+        class loading:
+            """Fallback loading class if module unavailable."""
+            def delay_with_loading_indicator(self, seconds: float) -> None:
+                time.sleep(seconds)
+            def input_with_flashing(self, prompt: str = "") -> str:
+                return input(prompt)
 
 
 # Constants and global variables
