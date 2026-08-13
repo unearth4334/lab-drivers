@@ -306,3 +306,100 @@ def test_generated_node_types_survive_forced_rediscovery(discovered_registry: No
     before = len(discovered_registry.types())
     discovered_registry.discover(extra_packages=["lab_drivers_nodes"], force=True)
     assert len(discovered_registry.types()) == before
+
+
+# ---- connection editor + connection test -----------------------------------
+#
+# Every instrument node declares how it is addressed (a ConnectionSpec) and can
+# be connection-tested. VISA drivers get the resource/LAN transports; serial
+# drivers get the serial-port transport. The test itself connects through the
+# same _connect() a run uses, so it honours each driver's connect() kwarg.
+
+
+def test_visa_nodes_offer_the_visa_transport_set(registry: NodeRegistry) -> None:
+    entry = next(e for e in registry.catalog() if e["type"] == "dmm6500-measure")
+    assert entry["supports_connection_test"] is True
+    keys = [t["key"] for t in entry["connection"]["transports"]]
+    assert keys == ["visa", "tcpip", "socket", "auto", "direct"]
+
+
+def test_serial_nodes_offer_the_serial_transport_set(registry: NodeRegistry) -> None:
+    entry = next(e for e in registry.catalog() if e["type"] == "ka3010p-output")
+    keys = [t["key"] for t in entry["connection"]["transports"]]
+    assert keys == ["serial", "auto", "direct"]
+
+
+def test_generated_visa_nodes_carry_the_visa_connection(discovered_registry: NodeRegistry) -> None:
+    entry = next(e for e in discovered_registry.catalog() if e["type"] == "dl3021-enable")
+    keys = [t["key"] for t in entry["connection"]["transports"]]
+    assert keys == ["visa", "tcpip", "socket", "auto", "direct"]
+
+
+class _IdentifiableDriver(_FakeDriverBase):
+    """A VISA-style driver that connects by ``address`` and caches an identity."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.status = "Not Connected"
+        self._idn = ""
+
+    def connect(self, address=None):
+        if address == "fail":
+            raise ConnectionError("nothing at 'fail'")
+        self.calls.append(("connect", address))
+        self.status = "Connected"
+        self._idn = f"KEITHLEY,DMM6500,{address or 'auto'},1.7"
+
+
+def test_test_connection_connects_reads_identity_and_disconnects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _IdentifiableDriver()
+    node = lab_drivers_nodes.DMM6500MeasureNode({"address": "TCPIP::localhost::5025::SOCKET"})
+    monkeypatch.setattr(node, "make_driver", lambda: driver)
+
+    result = node.test_connection()
+
+    assert result.ok is True
+    assert "KEITHLEY,DMM6500" in result.identity
+    assert ("connect", "TCPIP::localhost::5025::SOCKET") in driver.calls
+    assert ("disconnect",) in driver.calls
+
+
+def test_test_connection_reports_failure_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _IdentifiableDriver()
+    node = lab_drivers_nodes.DMM6500MeasureNode({"address": "fail"})
+    monkeypatch.setattr(node, "make_driver", lambda: driver)
+
+    result = node.test_connection()
+
+    assert result.ok is False
+    assert "fail" in result.message
+    assert ("disconnect",) in driver.calls  # disconnect still runs
+
+
+def test_test_connection_uses_the_serial_com_port_kwarg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A serial node's test must connect the way its driver does (com_port)."""
+
+    class SerialDriver(_FakeDriverBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.status = "Not Connected"
+
+        def connect(self, com_port=None):
+            self.calls.append(("connect", "com_port", com_port))
+            self.status = "Connected"
+
+    driver = SerialDriver()
+    node = lab_drivers_nodes.KA3010POutputNode({"address": "/dev/ttyUSB0"})
+    monkeypatch.setattr(node, "make_driver", lambda: driver)
+
+    result = node.test_connection()
+
+    assert result.ok is True
+    assert ("connect", "com_port", "/dev/ttyUSB0") in driver.calls
+

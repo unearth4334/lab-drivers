@@ -5,8 +5,9 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
-from automation_nodes import NodeInput, register
+from automation_nodes import NodeInput, NodeOutput, register
 from automation_nodes.base import NodeContext, NodeExecutionError
+from automation_nodes.labdrivers import VISA_CONNECTION
 
 from lab_drivers_nodes._base import LabDriverNode
 
@@ -26,6 +27,16 @@ class DMM6500MeasureNode(LabDriverNode):
     summary = "Read voltage, current or resistance from a Keithley DMM6500."
     instrument_key = "dmm6500"
     instrument_label = "Keithley DMM6500"
+    connection = VISA_CONNECTION
+    # Unit is left off the declaration because it follows the chosen function;
+    # it is supplied per reading at the measure() call site below.
+    outputs = (
+        NodeOutput(
+            name="reading", label="Reading", type="number",
+            help="Measured value (mean when several samples are taken). "
+                 "Unit follows the selected function: V, A or ohm.",
+        ),
+    )
     inputs = LabDriverNode.inputs + (
         NodeInput(
             name="function", label="Function", type="select", default="DC voltage",
@@ -66,11 +77,14 @@ class DMM6500MeasureNode(LabDriverNode):
             raise NodeExecutionError("No readings were taken")
 
         if len(readings) == 1:
-            context.log(f"{self.config['function']}: {readings[0]:.6g} {unit}")
+            value = readings[0]
+            context.log(f"{self.config['function']}: {value:.6g} {unit}")
         else:
-            mean = statistics.fmean(readings)
+            value = statistics.fmean(readings)
             stdev = statistics.pstdev(readings)
             context.log(
-                f"{self.config['function']}: mean {mean:.6g} {unit}, "
+                f"{self.config['function']}: mean {value:.6g} {unit}, "
                 f"sd {stdev:.3g} {unit} over {len(readings)} readings"
             )
+
+        context.measure("reading", value, unit=unit)

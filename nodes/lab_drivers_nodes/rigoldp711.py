@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from automation_nodes import NodeInput, register
+from automation_nodes import NodeInput, NodeOutput, register
 from automation_nodes.base import NodeContext
+from automation_nodes.labdrivers import SERIAL_CONNECTION
 
 from lab_drivers_nodes._base import LabDriverNode
 
@@ -19,6 +20,19 @@ class RigolDP711OutputNode(LabDriverNode):
     summary = "Set voltage/current on a Rigol DP711 and switch its output."
     instrument_key = "rigol-dp711"
     instrument_label = "Rigol DP711 Power Supply"
+    connection = SERIAL_CONNECTION
+    # Produced only when "Read back" is on; declaring them lets the Outputs tab
+    # offer a destination before the run.
+    outputs = (
+        NodeOutput(
+            name="voltage", label="Output voltage", type="number", unit="V",
+            help="Measured output voltage on readback.",
+        ),
+        NodeOutput(
+            name="current", label="Output current", type="number", unit="A",
+            help="Measured output current on readback.",
+        ),
+    )
     inputs = LabDriverNode.inputs + (
         NodeInput(
             name="voltage", label="Voltage", type="number", unit="V",
@@ -68,7 +82,8 @@ class RigolDP711OutputNode(LabDriverNode):
 
         if self.config["verify"]:
             context.check_cancelled()
-            context.log(
-                f"readback: {driver.measure_voltage():.3f} V, "
-                f"{driver.measure_current():.3f} A"
-            )
+            voltage = driver.measure_voltage()
+            current = driver.measure_current()
+            context.log(f"readback: {voltage:.3f} V, {current:.3f} A")
+            context.measure("voltage", voltage, unit="V")
+            context.measure("current", current, unit="A")
