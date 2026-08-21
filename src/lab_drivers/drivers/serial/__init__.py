@@ -1,3 +1,3 @@
 """Serial-backed instrument drivers."""
 
-__all__ = ["FLUKE45", "KA3010P", "U1233A", "RigolDP711"]
+__all__ = ["FLUKE45", "KA3010P", "U1233A", "RigolDP711", "BK2831E"]

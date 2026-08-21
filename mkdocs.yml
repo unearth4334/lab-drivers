@@ -37,6 +37,7 @@ nav:
   - API Reference:
     - api/index.md
     - Drivers:
+      - BK2831E: api/drivers/bk2831e.md
       - BK4055B: api/drivers/bk4055b.md
       - DL3021: api/drivers/dl3021.md
       - DMM6500: api/drivers/dmm6500.md
