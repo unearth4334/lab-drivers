@@ -12,6 +12,7 @@
 
 | Driver | Interface | Instrument type |
 |---|---|---|
+| [BK2831E](api/drivers/bk2831e.md) | Serial | Digital multimeter |
 | [DL3021](api/drivers/dl3021.md) | VISA | Electronic load |
 | [DMM6500](api/drivers/dmm6500.md) | VISA | Digital multimeter |
 | [DP832](api/drivers/dp832.md) | VISA | DC power supply |
