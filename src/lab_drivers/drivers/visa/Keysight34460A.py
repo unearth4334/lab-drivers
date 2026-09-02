@@ -386,13 +386,13 @@ class Keysight34460A:
     Example usage:
         multimeter.disable_autorange()
     """
-    def disable_autorange(self, function = None):
+    def disable_autorange(self, function: str = ""):
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
             raise ConnectionError(_ERROR_STYLE + error_message)
         
-        if function is None:
+        if not function:
             function = self.get_current_function()
 
         self.instrument.write(f"{function}:RANGE:AUTO OFF")
@@ -435,7 +435,7 @@ class Keysight34460A:
         # Configure DC current measurement with a range of 1A and a resolution of 0.0001A.
         multimeter.configure("CURRENT:DC", 1.0, 0.0001)
     """
-    def configure(self, measurement_type, range_val, resolution_val):
+    def configure(self, measurement_type: str, range_val: float, resolution_val: float):
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
@@ -459,7 +459,7 @@ class Keysight34460A:
     Example usage:
         multimeter.start_measurement(100)
     """
-    def start_measurement(self, n):
+    def start_measurement(self, n: int):
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."
@@ -491,7 +491,7 @@ class Keysight34460A:
         result = multimeter.calculate_average_all()
         print(f"Average: {result.Average}, Std Deviation: {result.StdDev}, Min: {result.Min}, Max: {result.Max}")
     """
-    def calculate_statistics(self):
+    def calculate_statistics(self) -> list:
 
         if not self.status == "Connected":
             error_message = "Not connected to Keysight 34460A Multimeter."

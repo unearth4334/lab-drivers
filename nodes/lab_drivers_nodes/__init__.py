@@ -42,7 +42,6 @@ from lab_drivers.drivers.visa.KS33500B import KS33500B
 from lab_drivers.drivers.visa.Keysight34460A import Keysight34460A
 from lab_drivers.drivers.visa.KeysightMSOX4154A import KeysightMSOX4154A
 from lab_drivers.drivers.visa.RSA3030 import RSA3030
-from lab_drivers.drivers.visa.RigolDP832 import RigolDP832
 from lab_drivers.drivers.visa.RigolDS7034 import RigolDS7034
 from lab_drivers.drivers.visa.StanfordPS310 import StanfordPS310
 
@@ -57,6 +56,9 @@ from lab_drivers_nodes.rigoldp711 import RigolDP711OutputNode
 #: resource string / LAN address, serial drivers a COM/tty port -- so the
 #: WebUI's connection modal offers only the ways this instrument can be reached.
 #: Every other public method on the driver becomes its own generated node type.
+#: The DP832 supply is exposed through the ``DP832`` driver only: the older
+#: ``RigolDP832`` class covers the same instrument but is untyped (its methods
+#: would not introspect) and prompts on stdin, which would hang a node.
 _INSTRUMENTS: tuple[tuple[type, str, str, tuple[str, ...], object], ...] = (
     (FLUKE45, "fluke45", "Fluke 45 Multimeter", (), SERIAL_CONNECTION),
     (KA3010P, "ka3010p", "Korad KA3010P Power Supply",
@@ -69,9 +71,7 @@ _INSTRUMENTS: tuple[tuple[type, str, str, tuple[str, ...], object], ...] = (
     (DL3021, "dl3021", "Rigol DL3021 Electronic Load", (), VISA_CONNECTION),
     (DMM6500, "dmm6500", "Keithley DMM6500",
      ("measure_voltage", "measure_current", "measure_resistance"), VISA_CONNECTION),
-    (DP832, "dp832", "Rigol DP832 Power Supply (DP832 driver)", (), VISA_CONNECTION),
-    (RigolDP832, "rigol-dp832", "Rigol DP832 Power Supply (RigolDP832 driver)", (),
-     VISA_CONNECTION),
+    (DP832, "dp832", "Rigol DP832 Power Supply", (), VISA_CONNECTION),
     (KS33500B, "ks33500b", "Keysight 33500B Waveform Generator", (), VISA_CONNECTION),
     (Keysight34460A, "keysight-34460a", "Keysight 34460A Multimeter", (), VISA_CONNECTION),
     (KeysightMSOX4154A, "keysight-msox4154a", "Keysight MSOX4154A Oscilloscope", (),

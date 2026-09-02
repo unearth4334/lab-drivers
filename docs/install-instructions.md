@@ -12,7 +12,7 @@ The simplest way to install `lab-drivers` into any project environment is direct
 Replace `v0.1.0` with the [latest tagged release](https://github.com/unearth4334/lab-drivers/releases) if a newer version is available.
 
 ```bash
-pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.3.3"
+pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.4.0"
 ```
 
 ## Add as a project dependency
@@ -22,14 +22,14 @@ pip install "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.g
 ```toml
 [project]
 dependencies = [
-  "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.3.3",
+  "lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.4.0",
 ]
 ```
 
 **`requirements.txt`:**
 
 ```text
-lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.3.3
+lab-drivers[all] @ git+https://github.com/unearth4334/lab-drivers.git@v0.4.0
 ```
 
 Then install normally:

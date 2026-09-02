@@ -348,7 +348,7 @@ class DP832:
         self.instrument.write(command)
         time.sleep(_DELAY)
 
-    def toggle_output(self, chan: int, state: Union[int, str]) -> None:
+    def toggle_output(self, chan: int, state: bool) -> None:
         """
         Turn channel output on or off.
         

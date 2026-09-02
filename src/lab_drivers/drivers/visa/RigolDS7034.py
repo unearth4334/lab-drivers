@@ -486,7 +486,7 @@ class RigolDS7034:
         voltage = oscilloscope.measure_item()
         print(f"Voltage: {voltage} V")
     """
-    def measure_item(self, item, source):
+    def measure_item(self, item: str, source: str) -> float:
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
@@ -577,7 +577,7 @@ class RigolDS7034:
         ConnectionError: If not connected to Rigol DS7034 Oscilloscope.
         ValueError: If an invalid item or source is requested.
     """
-    def enable_statistic_item(self, item, source):
+    def enable_statistic_item(self, item: str, source: str):
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
@@ -627,7 +627,7 @@ class RigolDS7034:
         ConnectionError: If not connected to Rigol DS7034 Oscilloscope.
         ValueError: If an invalid item is requested.
     """
-    def clear_measure_item(self, item_n):
+    def clear_measure_item(self, item_n: int):
         
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
@@ -659,7 +659,7 @@ class RigolDS7034:
         ConnectionError: If not connected to Rigol DS7034 Oscilloscope.
         ValueError: If an invalid channel, impedance, gain, coupling, or bandwidth limit is requested.
     """
-    def configure_probe(self, channel, impedance = 'OMEG', gain = 10, coupling = 'DC', bwlimit = 'OFF'):
+    def configure_probe(self, channel: int, impedance: str = 'OMEG', gain: float = 10, coupling: str = 'DC', bwlimit: str = 'OFF'):
 
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
@@ -773,7 +773,7 @@ class RigolDS7034:
         ConnectionError: If not connected to Rigol DS7034 Oscilloscope.
         ValueError: If an invalid channel or vertical scale is requested.
     """
-    def set_vertical_scale(self, channel, value=0.1):
+    def set_vertical_scale(self, channel: int, value: float = 0.1):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
             raise ConnectionError(_ERROR_STYLE + error_message)
@@ -805,7 +805,7 @@ class RigolDS7034:
         ConnectionError: If not connected to Rigol DS7034 Oscilloscope.
         ValueError: If an invalid channel or vertical offset is requested.
     """
-    def set_vertical_offset(self, channel, value=0):
+    def set_vertical_offset(self, channel: int, value: float = 0):
         if not self.status == "Connected":
             error_message = "Not connected to Rigol DS7034 Oscilloscope."
             raise ConnectionError(_ERROR_STYLE + error_message)
