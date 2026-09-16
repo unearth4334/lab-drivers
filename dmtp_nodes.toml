@@ -17,8 +17,17 @@ summary = "Instrument nodes wrapping lab-drivers VISA and serial equipment for D
 import_roots = ["src", "nodes"]
 # Imported for its @register side effects -- this is what publishes the nodes.
 modules = ["lab_drivers_nodes"]
-# Installed into the package's private deps prefix. These are the imports the
-# wrapped driver modules pull in at import time; a working VISA backend
-# (NI-VISA or pyvisa-py) and/or a serial port driver is still required on the
-# machine that talks to hardware.
-requires = ["pyvisa>=1.11", "pyserial>=3.5", "numpy>=1.22", "colorama>=0.4.4"]
+# Installed into the package's private deps prefix. Includes a pure-Python VISA
+# backend (pyvisa-py) and mDNS discovery (zeroconf) so a machine without a
+# system NI-VISA -- e.g. the automation server -- still has a working VISA
+# backend and LAN auto-detection out of the box. When a system NI-VISA is
+# present, pyvisa uses it in preference automatically. A serial port driver is
+# still required on the machine that talks to serial hardware.
+requires = [
+    "pyvisa>=1.11",
+    "pyvisa-py>=0.7",
+    "zeroconf>=0.130",
+    "pyserial>=3.5",
+    "numpy>=1.22",
+    "colorama>=0.4.4",
+]

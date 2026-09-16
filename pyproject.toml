@@ -19,6 +19,9 @@ dependencies = [
 
 [project.optional-dependencies]
 visa = ["pyvisa>=1.11"]
+# Pure-Python VISA backend + mDNS discovery, for machines without a system
+# NI-VISA (e.g. the automation server). pyvisa auto-selects NI-VISA when present.
+py = ["pyvisa>=1.11", "pyvisa-py>=0.7", "zeroconf>=0.130"]
 serial = ["pyserial>=3.5"]
 saleae = ["logic2-automation>=1.0.0"]
 lan = ["zeroconf>=0.130"]
@@ -31,6 +34,7 @@ docs = [
 ]
 all = [
   "pyvisa>=1.11",
+  "pyvisa-py>=0.7",
   "pyserial>=3.5",
   "logic2-automation>=1.0.0",
   "zeroconf>=0.130",
