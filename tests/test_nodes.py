@@ -284,6 +284,19 @@ def test_generated_nodes_are_attributed_to_this_package(discovered_registry: Nod
     assert generated["instrument"] == {"key": "dl3021", "label": "Rigol DL3021 Electronic Load"}
 
 
+def test_bk4055b_driver_is_registered_and_generates_nodes(discovered_registry: NodeRegistry) -> None:
+    """The BK4055B waveform generator must reach the picker through generation."""
+    catalog = {entry["type"]: entry for entry in discovered_registry.catalog()}
+
+    entry = catalog["bk4055b-set-frequency"]  # BK4055B has no hand-written node
+    assert entry["package"] == "lab_drivers_nodes"
+    assert entry["instrument"] == {
+        "key": "bk4055b", "label": "B&K Precision 4055B Waveform Generator",
+    }
+    keys = [t["key"] for t in entry["connection"]["transports"]]
+    assert keys == ["visa", "tcpip", "socket", "auto", "direct"]
+
+
 def test_excluded_methods_are_not_also_generated(discovered_registry: NodeRegistry) -> None:
     """The curated nodes' own methods must not get a second, raw-method node."""
     type_keys = set(discovered_registry.types())

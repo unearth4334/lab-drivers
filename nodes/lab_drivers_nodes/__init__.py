@@ -35,6 +35,7 @@ from lab_drivers.drivers.serial.FLUKE45 import FLUKE45
 from lab_drivers.drivers.serial.KA3010P import KA3010P
 from lab_drivers.drivers.serial.RigolDP711 import RigolDP711
 from lab_drivers.drivers.serial.U1233A import U1233A
+from lab_drivers.drivers.visa.BK4055B import BK4055B
 from lab_drivers.drivers.visa.DL3021 import DL3021
 from lab_drivers.drivers.visa.DMM6500 import DMM6500
 from lab_drivers.drivers.visa.DP832 import DP832
@@ -68,6 +69,7 @@ _INSTRUMENTS: tuple[tuple[type, str, str, tuple[str, ...], object], ...] = (
      ("set_voltage", "set_current", "turn_on", "turn_off", "set_output_state"),
      SERIAL_CONNECTION),
     (U1233A, "u1233a", "Agilent U1233A Multimeter", (), SERIAL_CONNECTION),
+    (BK4055B, "bk4055b", "B&K Precision 4055B Waveform Generator", (), VISA_CONNECTION),
     (DL3021, "dl3021", "Rigol DL3021 Electronic Load", (), VISA_CONNECTION),
     (DMM6500, "dmm6500", "Keithley DMM6500",
      ("measure_voltage", "measure_current", "measure_resistance"), VISA_CONNECTION),
