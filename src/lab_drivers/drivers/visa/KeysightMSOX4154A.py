@@ -261,6 +261,26 @@ Measurement Methods:
 - `measure_vpp(channel)` - Measure peak-to-peak voltage
 - (Additional measurement methods may vary by implementation)
 
+Control / Setup Methods:
+- `set_channel_display(channel, on)` - Show/hide a channel trace
+- `set_channel_scale(channel, scale_v_per_div)` - Vertical scale (V/div)
+- `set_channel_offset(channel, offset_v)` - Vertical offset (V)
+- `set_channel_coupling(channel, coupling)` - Input coupling (AC/DC)
+- `set_timebase_scale(scale_s_per_div)` - Horizontal scale (s/div)
+- `set_timebase_position(position_s)` - Horizontal position/delay (s)
+- `set_timebase_reference(reference)` - Reference point (LEFT/CENT/RIGH)
+- `set_trigger_mode(mode)` - Trigger mode (EDGE/GLIT/PATT/TRAN/TV)
+- `set_trigger_sweep(sweep)` - Sweep mode (AUTO/NORM)
+- `set_trigger_source(channel)` - Edge-trigger source channel
+- `set_trigger_slope(slope)` - Edge slope (POS/NEG/EITH)
+- `set_trigger_level(level_v)` - Edge-trigger level (V)
+- `set_trigger_holdoff(holdoff_s)` - Trigger holdoff (s)
+- `set_acquisition_type(acq_type)` - NORM/AVER/HRES/PEAK
+- `set_acquisition_mode(mode)` - RTIM/SEGM
+- `set_averaging(count)` - Enable averaging over N acquisitions
+- `autoscale()` - Auto-scale timebase and vertical settings
+- `run()` / `stop()` / `single()` - Acquisition control
+
 Connection Methods:
 - `connect(address)` - Connect to specific VISA address
 - `disconnect()` - Close connection
@@ -298,7 +318,7 @@ See Also
 
 
 from __future__ import annotations
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Literal
 
 import pyvisa
 from colorama import init, Fore, Style
@@ -448,6 +468,22 @@ class KeysightMSOX4154A:
             print(_SUCCESS_STYLE + "Oscilloscope acquisition started")
         except Exception: pass
 
+    def single(self) -> None:
+        """Arm the oscilloscope for a single-shot acquisition.
+
+        Issues ``:SINGle``: the instrument waits for one trigger, captures a
+        single acquisition, then stops. Pair with :meth:`is_running` to poll
+        for completion before reading a waveform.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.single()
+        """
+        self._w(":SINGle")
+
     # ---------- Configuration / Metadata ----------
     def _q(self, scpi: str) -> Optional[str]:
         """Query a SCPI command and return the stripped string, or ``None`` on error."""
@@ -481,6 +517,37 @@ class KeysightMSOX4154A:
             return bool(int(float(s)))
         except (TypeError, ValueError):
             return None
+
+    def _w(self, scpi: str) -> None:
+        """Write a SCPI command, guarding the connection.
+
+        The write-side counterpart of :meth:`_q`. A VISA failure propagates so
+        a refused command surfaces to the caller rather than being swallowed;
+        the node layer already normalises it into a run error.
+        """
+        self._chk()
+        self.instrument.write(scpi)  # type: ignore
+
+    @staticmethod
+    def _check_channel(channel: int) -> int:
+        """Validate an analog channel index, returning it, or raise ``ValueError``."""
+        if isinstance(channel, bool) or not isinstance(channel, int) or not (1 <= channel <= 4):
+            raise ValueError(_ERROR_STYLE + f"channel must be int 1-4, got {channel!r}")
+        return channel
+
+    @staticmethod
+    def _one_of(value: str, allowed: tuple[str, ...], name: str) -> str:
+        """Normalise ``value`` to one of ``allowed`` (case-insensitive), or raise.
+
+        The accepted tokens are the SCPI short forms the matching ``get_*``
+        query returns, so a value read back and written again round-trips.
+        """
+        canon = {a.upper(): a for a in allowed}
+        token = canon.get(str(value).strip().upper())
+        if token is None:
+            raise ValueError(
+                _ERROR_STYLE + f"{name} must be one of {allowed}, got {value!r}")
+        return token
 
     def get_channel_config(self, channel: int) -> Dict[str, Any]:
         """
@@ -655,6 +722,309 @@ class KeysightMSOX4154A:
             "complete_pct":   self._qf(":ACQuire:COMPlete?"),
             "running":        self._qbool(":ACQuire:STATE?"),
         }
+
+    # ---------- Controls (setters) ----------
+    def set_channel_display(self, channel: int, on: bool) -> None:
+        """Turn an analog channel's trace on or off.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+            on: ``True`` shows the trace, ``False`` hides it.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_channel_display(1, True)
+        """
+        n = self._check_channel(channel)
+        self._w(f":CHANnel{n}:DISPlay {1 if on else 0}")
+
+    def set_channel_scale(self, channel: int, scale_v_per_div: float) -> None:
+        """Set an analog channel's vertical scale.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+            scale_v_per_div: Vertical scale in volts per division.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_channel_scale(1, 0.5)  # 0.5 V/div
+        """
+        n = self._check_channel(channel)
+        self._w(f":CHANnel{n}:SCALe {float(scale_v_per_div)}")
+
+    def set_channel_offset(self, channel: int, offset_v: float) -> None:
+        """Set an analog channel's vertical offset.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+            offset_v: Vertical offset in volts.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_channel_offset(1, 0.0)
+        """
+        n = self._check_channel(channel)
+        self._w(f":CHANnel{n}:OFFSet {float(offset_v)}")
+
+    def set_channel_coupling(self, channel: int, coupling: Literal["AC", "DC"]) -> None:
+        """Set an analog channel's input coupling.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+            coupling: ``"AC"`` or ``"DC"``.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4, or ``coupling`` is invalid.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_channel_coupling(1, "DC")
+        """
+        n = self._check_channel(channel)
+        self._w(f":CHANnel{n}:COUPling {self._one_of(coupling, ('AC', 'DC'), 'coupling')}")
+
+    def set_timebase_scale(self, scale_s_per_div: float) -> None:
+        """Set the horizontal (timebase) scale.
+
+        Args:
+            scale_s_per_div: Horizontal scale in seconds per division.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_timebase_scale(1e-6)  # 1 µs/div
+        """
+        self._w(f":TIMebase:SCALe {float(scale_s_per_div)}")
+
+    def set_timebase_position(self, position_s: float) -> None:
+        """Set the horizontal position (delay) of the timebase.
+
+        Args:
+            position_s: Horizontal position in seconds; positive moves the
+                trigger point left of centre.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_timebase_position(0.0)
+        """
+        self._w(f":TIMebase:POSition {float(position_s)}")
+
+    def set_timebase_reference(
+        self, reference: Literal["LEFT", "CENT", "RIGH"]
+    ) -> None:
+        """Set the on-screen reference point the timebase position is measured from.
+
+        Args:
+            reference: ``"LEFT"``, ``"CENT"`` (centre) or ``"RIGH"`` (right).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``reference`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_timebase_reference("CENT")
+        """
+        ref = self._one_of(reference, ("LEFT", "CENT", "RIGH"), "reference")
+        self._w(f":TIMebase:REFerence {ref}")
+
+    def set_trigger_mode(
+        self, mode: Literal["EDGE", "GLIT", "PATT", "TRAN", "TV"]
+    ) -> None:
+        """Set the trigger mode.
+
+        Args:
+            mode: Trigger mode — ``"EDGE"`` (edge), ``"GLIT"`` (glitch/pulse
+                width), ``"PATT"`` (pattern), ``"TRAN"`` (transition) or
+                ``"TV"`` (video).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``mode`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_mode("EDGE")
+        """
+        m = self._one_of(mode, ("EDGE", "GLIT", "PATT", "TRAN", "TV"), "mode")
+        self._w(f":TRIGger:MODE {m}")
+
+    def set_trigger_sweep(self, sweep: Literal["AUTO", "NORM"]) -> None:
+        """Set the trigger sweep mode.
+
+        Args:
+            sweep: ``"AUTO"`` (sweep without a trigger) or ``"NORM"`` (only
+                sweep on a valid trigger).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``sweep`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_sweep("NORM")
+        """
+        self._w(f":TRIGger:SWEep {self._one_of(sweep, ('AUTO', 'NORM'), 'sweep')}")
+
+    def set_trigger_source(self, channel: int) -> None:
+        """Set the edge-trigger source to an analog channel.
+
+        Args:
+            channel: Analog channel index in ``1``–``4``.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``channel`` is not in 1-4.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_source(1)
+        """
+        n = self._check_channel(channel)
+        self._w(f":TRIGger:EDGE:SOURce CHAN{n}")
+
+    def set_trigger_slope(self, slope: Literal["POS", "NEG", "EITH"]) -> None:
+        """Set the edge-trigger slope.
+
+        Args:
+            slope: ``"POS"`` (rising), ``"NEG"`` (falling) or ``"EITH"``
+                (either edge).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``slope`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_slope("POS")
+        """
+        s = self._one_of(slope, ("POS", "NEG", "EITH"), "slope")
+        self._w(f":TRIGger:EDGE:SLOPe {s}")
+
+    def set_trigger_level(self, level_v: float) -> None:
+        """Set the edge-trigger level.
+
+        Args:
+            level_v: Trigger level in volts, applied to the current edge source.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_level(1.5)
+        """
+        self._w(f":TRIGger:EDGE:LEVel {float(level_v)}")
+
+    def set_trigger_holdoff(self, holdoff_s: float) -> None:
+        """Set the trigger holdoff time.
+
+        Args:
+            holdoff_s: Holdoff in seconds — the minimum time before the next
+                trigger is accepted.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_trigger_holdoff(60e-9)
+        """
+        self._w(f":TRIGger:HOLDoff {float(holdoff_s)}")
+
+    def set_acquisition_type(
+        self, acq_type: Literal["NORM", "AVER", "HRES", "PEAK"]
+    ) -> None:
+        """Set the acquisition type.
+
+        Args:
+            acq_type: ``"NORM"`` (normal), ``"AVER"`` (averaging),
+                ``"HRES"`` (high resolution) or ``"PEAK"`` (peak detect).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``acq_type`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_acquisition_type("HRES")
+        """
+        t = self._one_of(acq_type, ("NORM", "AVER", "HRES", "PEAK"), "acq_type")
+        self._w(f":ACQuire:TYPE {t}")
+
+    def set_acquisition_mode(self, mode: Literal["RTIM", "SEGM"]) -> None:
+        """Set the acquisition mode.
+
+        Args:
+            mode: ``"RTIM"`` (real-time) or ``"SEGM"`` (segmented).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``mode`` is not one of the allowed values.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_acquisition_mode("RTIM")
+        """
+        self._w(f":ACQuire:MODE {self._one_of(mode, ('RTIM', 'SEGM'), 'mode')}")
+
+    def set_averaging(self, count: int) -> None:
+        """Enable averaging acquisition over ``count`` acquisitions.
+
+        Selects the ``AVERage`` acquisition type and sets its count in one
+        call, since an averaging count is meaningless without the matching
+        type.
+
+        Args:
+            count: Number of acquisitions to average (2-65536).
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+            ValueError: If ``count`` is outside 2-65536.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.set_averaging(16)
+        """
+        n = int(count)
+        if not (2 <= n <= 65536):
+            raise ValueError(_ERROR_STYLE + f"count must be 2-65536, got {count!r}")
+        self._w(":ACQuire:TYPE AVERage")
+        self._w(f":ACQuire:COUNt {n}")
+
+    def autoscale(self) -> None:
+        """Automatically scale the timebase and vertical settings to the signal.
+
+        Issues ``:AUToscale``: the instrument analyses every input with
+        activity and picks a timebase, vertical scale and trigger that display
+        the signal. Convenient before a measurement of an unknown signal.
+
+        Raises:
+            ConnectionError: If the driver is not connected to an instrument.
+
+        Example:
+            >>> scope = KeysightMSOX4154A()
+            >>> scope.autoscale()
+        """
+        self._w(":AUToscale")
 
     def get_metadata(self, channels: Optional[List[int]] = None) -> Dict[str, Any]:
         """
