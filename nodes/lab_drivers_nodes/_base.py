@@ -51,12 +51,9 @@ class LabDriverNode(InstrumentNode):
             self._connect(driver, context)
             self.perform(driver, context)
         finally:
-            disconnect = getattr(driver, "disconnect", None)
-            if callable(disconnect):
-                try:
-                    disconnect()
-                except Exception:  # noqa: BLE001 - never mask the primary error
-                    context.log("instrument disconnect failed", level="warn")
+            # Keep teardown semantics in lockstep with InstrumentNode so VISA
+            # sessions do not leak across runs.
+            self._teardown(driver, context)
 
     def _connect(self, driver: Any, context: NodeContext) -> None:
         connect = getattr(driver, "connect", None)
