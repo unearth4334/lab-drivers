@@ -256,6 +256,62 @@ def test_disconnect_always_runs_even_when_connect_is_never_reached(monkeypatch: 
     assert ("disconnect",) in driver.calls
 
 
+def test_execute_always_closes_the_driver_resource_manager(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RM:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class Driver(_FakeDriverBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.rm = RM()
+
+        def connect(self, address=None):
+            self.calls.append(("connect", address))
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    node.execute(NodeContext(config=node.config))
+
+    assert ("disconnect",) in driver.calls
+    assert driver.rm.closed is True
+
+
+def test_teardown_warnings_do_not_mask_the_primary_node_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RM:
+        def close(self) -> None:
+            raise RuntimeError("rm close failure")
+
+    class Driver(_FakeDriverBase):
+        def __init__(self) -> None:
+            super().__init__()
+            self.rm = RM()
+
+        def connect(self, address=None):
+            self.calls.append(("connect", address))
+
+        def disconnect(self) -> None:
+            raise RuntimeError("disconnect failure")
+
+    driver = Driver()
+    node = _node_with_driver(monkeypatch, driver)
+    monkeypatch.setattr(node, "perform", lambda driver, context: (_ for _ in ()).throw(
+        RuntimeError("primary failure")))
+    lines: list[tuple[str, str]] = []
+    context = NodeContext(config=node.config, log=lambda level, text: lines.append((level, text)))
+
+    with pytest.raises(RuntimeError, match="primary failure"):
+        node.execute(context)
+
+    assert ("warn", "instrument disconnect failed") in lines
+    assert ("warn", "instrument resource-manager close failed") in lines
+
+
 # ---- generated coverage (automation_nodes.introspect) ----------------------
 #
 # Most instrument methods reach the picker via generation, not hand-written
