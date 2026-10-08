@@ -432,6 +432,22 @@ class KeysightMSOX4154A:
 
     def disconnect(self):
         if self.instrument is not None:
+            # A Keysight scope on LAN only reaps a VXI-11/LXI link after its own
+            # inactivity timeout (minutes). Closing while an overlapped command
+            # (:AUToscale, :DISPlay:DATA?) is still running leaves the link busy,
+            # so rapid connect/disconnect cycles exhaust the instrument's link
+            # pool and the next connect blocks for minutes. A VISA device clear
+            # aborts the pending operation and lets the instrument release the
+            # link promptly; it must never block or raise, so it is time-bounded
+            # and fully guarded.
+            try:
+                self.instrument.timeout = 2000
+            except Exception:
+                pass
+            try:
+                self.instrument.clear()
+            except Exception:
+                pass
             try:
                 self.instrument.close()
             finally:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from automation_nodes.base import NodeContext, NodeExecutionError
+from automation_nodes.base import NodeContext
 from automation_nodes.labdrivers import InstrumentNode
 
 from lab_drivers_nodes._logging import driver_logs_to
@@ -40,20 +40,6 @@ class LabDriverNode(InstrumentNode):
         if "interactive" in params:
             kwargs["interactive"] = self.interactive
         return driver_cls(**kwargs)
-
-    def execute(self, context: NodeContext) -> None:
-        try:
-            driver = self.make_driver()
-        except Exception as ex:  # noqa: BLE001 - normalize driver construction errors
-            raise NodeExecutionError(f"Could not create instrument driver: {ex}") from ex
-
-        try:
-            self._connect(driver, context)
-            self.perform(driver, context)
-        finally:
-            # Keep teardown semantics in lockstep with InstrumentNode so VISA
-            # sessions do not leak across runs.
-            self._teardown(driver, context)
 
     def _connect(self, driver: Any, context: NodeContext) -> None:
         connect = getattr(driver, "connect", None)

@@ -158,6 +158,28 @@ class TestKeysightMSOX4154AControls(unittest.TestCase):
         with self.assertRaises(ConnectionError):
             scope.set_trigger_level(1.0)
 
+    # ---- disconnect ---------------------------------------------------------
+
+    def test_disconnect_clears_before_closing(self) -> None:
+        scope = self._make_connected()
+        inst = scope.instrument
+        scope.disconnect()
+        # Device clear releases the instrument's LAN link before the session is
+        # closed, so a fresh connect does not block on a stale busy link.
+        inst.clear.assert_called_once_with()
+        inst.close.assert_called_once_with()
+        self.assertIsNone(scope.instrument)
+        self.assertEqual(scope.status, "Not Connected")
+        self.assertIsNone(scope.address)
+
+    def test_disconnect_closes_even_if_clear_fails(self) -> None:
+        scope = self._make_connected()
+        inst = scope.instrument
+        inst.clear.side_effect = RuntimeError("clear not supported")
+        scope.disconnect()
+        inst.close.assert_called_once_with()
+        self.assertIsNone(scope.instrument)
+
 
 if __name__ == "__main__":
     unittest.main()
